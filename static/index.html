@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Anz-Creator :: AI Content Studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo__title">◈ ANZ-CREATOR</div>
+      <div class="logo__tag">AI CONTENT STUDIO</div>
+      <div class="logo__status"><span class="dot"></span> SYS ONLINE :<span id="server-port">8080</span></div>
+    </div>
+
+    <nav>
+      <div class="nav-section">
+        <div class="nav-section__label">// MODULES</div>
+        <div class="nav-item active" data-view="short-maker">
+          <span class="nav-item__icon">✂</span>
+          <span>Short Maker</span>
+        </div>
+        <div class="nav-item" data-view="story-teller">
+          <span class="nav-item__icon">✦</span>
+          <span>Text to Story</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section__label">// SYSTEM</div>
+        <div class="nav-item" data-view="api-manager">
+          <span class="nav-item__icon">⊞</span>
+          <span>API Key Manager</span>
+        </div>
+        <div class="nav-item" data-view="outputs">
+          <span class="nav-item__icon">⤓</span>
+          <span>Outputs</span>
+        </div>
+        <div class="nav-item" data-view="settings">
+          <span class="nav-item__icon">◎</span>
+          <span>Settings</span>
+        </div>
+      </div>
+    </nav>
+
+    <div class="resource-monitor">
+      <div class="api-status">
+        <div class="api-status__head">
+          <span class="text-muted">API KEYS</span>
+          <span class="api-status__count"><span id="api-active">0</span>/<span id="api-total">0</span></span>
+        </div>
+        <div class="text-xs text-muted">mode: <span id="api-mode" class="text-cyan">round_robin</span></div>
+      </div>
+
+      <div class="mt-3"></div>
+
+      <div class="monitor-row">
+        <span class="monitor-label">CPU</span>
+        <div class="monitor-bar"><div class="monitor-bar__fill" id="cpu-bar" style="width:0%"></div></div>
+        <span class="monitor-val" id="cpu-val">0%</span>
+      </div>
+      <div class="monitor-row">
+        <span class="monitor-label">RAM</span>
+        <div class="monitor-bar"><div class="monitor-bar__fill" id="ram-bar" style="width:0%"></div></div>
+        <span class="monitor-val" id="ram-val">0%</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar__title"><span>◈</span><span id="topbar-title">SHORT MAKER</span></div>
+      <div class="topbar__badges">
+        <div class="badge badge--green"><span class="dot" style="width:5px;height:5px;border-radius:50%;background:currentColor"></span> ONLINE</div>
+        <div class="badge badge--cyan" id="badge-keys">0 KEYS</div>
+        <div class="badge badge--purple" id="badge-version">v1.0.0</div>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- =============== VIEW: SHORT MAKER =============== -->
+      <section class="view active" data-view="short-maker">
+
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">INPUT SOURCE</div>
+
+          <div class="tabs">
+            <div class="tabs__tab active" data-tab="url">YOUTUBE URL</div>
+            <div class="tabs__tab" data-tab="file">UPLOAD FILE</div>
+          </div>
+
+          <div class="tab-content active" data-tab="url">
+            <div class="field">
+              <label class="field__label">Youtube URL</label>
+              <input class="input" id="sm-url" placeholder="https://youtube.com/watch?v=..." />
+            </div>
+          </div>
+
+          <div class="tab-content" data-tab="file">
+            <div class="field">
+              <label class="field__label">Pilih Video</label>
+              <input class="input" type="file" id="sm-file" accept="video/*" />
+              <div class="text-xs text-muted mt-2" id="sm-file-info"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">VIDEO PREVIEW</div>
+          <div class="video-preview" id="sm-preview">
+            <div class="video-preview__empty">
+              <div class="video-preview__empty-icon">◉</div>
+              <div>Awaiting input signal...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">CLIP CUTTER :: AI VIRAL SCAN</div>
+
+          <div class="field-row">
+            <div class="field">
+              <label class="field__label">Topik Konten</label>
+              <select class="select" id="sm-topic">
+                <option value="free">🌐 Bebas (Semua Topik)</option>
+                <option value="business">💰 Bisnis &amp; Keuangan</option>
+                <option value="motivation">🧠 Motivasi &amp; Mindset</option>
+                <option value="romance">❤️ Asmara &amp; Hubungan</option>
+                <option value="entertainment">🎭 Hiburan &amp; Komedi</option>
+                <option value="education">💡 Edukasi &amp; Fakta</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label">Durasi Clip</label>
+              <select class="select" id="sm-duration">
+                <option value="auto">Auto (AI)</option>
+                <option value="short">15 – 30 detik</option>
+                <option value="medium">30 – 60 detik</option>
+                <option value="long">45 – 90 detik</option>
+                <option value="custom">Custom (manual)</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="sm-custom-time" class="field-row hidden">
+            <div class="field">
+              <label class="field__label">Mulai (HH:MM:SS)</label>
+              <input class="input" id="sm-start" placeholder="00:00:00" />
+            </div>
+            <div class="field">
+              <label class="field__label">Selesai (HH:MM:SS)</label>
+              <input class="input" id="sm-end" placeholder="00:00:30" />
+            </div>
+          </div>
+
+          <div class="flex gap-2 mt-2">
+            <button class="btn" id="sm-find-viral">◎ Cari Momen Viral (AI)</button>
+          </div>
+
+          <div id="sm-viral-list" class="mt-3"></div>
+        </div>
+
+      </section>
+
+      <!-- =============== VIEW: STORY TELLER =============== -->
+      <section class="view" data-view="story-teller">
+
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">STORY INPUT</div>
+
+          <div class="field">
+            <label class="field__label">Judul / Topik Cerita</label>
+            <input class="input" id="st-title" placeholder="Misal: Kisah pengusaha muda yang bangkit dari kegagalan" />
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label class="field__label">Genre</label>
+              <select class="select" id="st-genre">
+                <option>Drama</option><option>Romance</option><option>Thriller</option>
+                <option>Motivasi</option><option>Horor</option><option>Edukasi</option><option>Komedi</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label">Gaya Narasi</label>
+              <select class="select" id="st-style">
+                <option>Dramatis</option><option>Formal</option><option>Santai</option><option>Puitis</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label class="field__label">Panjang Cerita</label>
+              <select class="select" id="st-length">
+                <option value="short">Short (~1 menit)</option>
+                <option value="medium" selected>Medium (~3 menit)</option>
+                <option value="long">Long (~5 menit)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label">Bahasa</label>
+              <select class="select" id="st-language">
+                <option value="id">Indonesia</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex gap-2 mt-2">
+            <button class="btn" id="st-preview">◎ Preview Naskah</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">NASKAH PREVIEW</div>
+          <div id="st-script-list" class="empty-state">Klik "Preview Naskah" untuk melihat draf cerita</div>
+        </div>
+
+      </section>
+
+      <!-- =============== VIEW: API KEY MANAGER =============== -->
+      <section class="view" data-view="api-manager">
+
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">API KEY ROTATION :: INPUT</div>
+
+          <div class="field">
+            <label class="field__label">Paste Banyak Key (1 baris = 1 key)</label>
+            <textarea class="textarea" id="keys-textarea" rows="6" placeholder="AIza...&#10;AIza...&#10;AIza..."></textarea>
+          </div>
+
+          <div class="flex gap-2">
+            <button class="btn" id="keys-add">◎ Tambah Keys</button>
+            <label class="btn btn--ghost" for="keys-file">⤓ Import .txt</label>
+            <input type="file" id="keys-file" accept=".txt" class="hidden" />
+            <button class="btn btn--danger" id="keys-clear">✕ Hapus Semua</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">ROTATION MODE</div>
+          <div class="seg" id="keys-mode">
+            <div class="seg__item active" data-mode="round_robin">ROUND ROBIN</div>
+            <div class="seg__item" data-mode="smart">SMART</div>
+          </div>
+          <div class="text-xs text-muted mt-2">
+            <strong>Round Robin</strong> — bergilir urut. &nbsp;
+            <strong>Smart</strong> — pilih key dengan usage terkecil dulu.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">
+            REGISTERED KEYS (<span id="keys-count">0</span>) ::
+            ACTIVE <span class="text-cyan" id="keys-active">0</span> /
+            QUOTA <span style="color:var(--amber)" id="keys-quota">0</span> /
+            INVALID <span style="color:var(--pink)" id="keys-invalid">0</span>
+          </div>
+          <div id="keys-list">
+            <div class="empty-state">Belum ada API key. Tambah di atas.</div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- =============== VIEW: OUTPUTS =============== -->
+      <section class="view" data-view="outputs">
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">GENERATED OUTPUTS</div>
+          <div id="outputs-list"><div class="empty-state">Belum ada output.</div></div>
+        </div>
+      </section>
+
+      <!-- =============== VIEW: SETTINGS =============== -->
+      <section class="view" data-view="settings">
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">SERVER / SYSTEM</div>
+          <div class="meta-row"><span class="meta-row__label">Port</span><span class="meta-row__value" id="s-port">8080</span></div>
+          <div class="meta-row"><span class="meta-row__label">Version</span><span class="meta-row__value">1.0.0</span></div>
+          <div class="meta-row"><span class="meta-row__label">Host</span><span class="meta-row__value">127.0.0.1 (localhost)</span></div>
+        </div>
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">EXTERNAL APIS</div>
+          <div class="text-sm text-muted">
+            Pexels &amp; Pixabay API key dibaca dari file <code>.env</code>.
+            Edit <code>.env</code> lalu restart server.
+          </div>
+          <div class="divider"></div>
+          <div class="meta-row"><span class="meta-row__label">GEMINI</span><span class="meta-row__value"><span id="env-gemini">via API Key Manager</span></span></div>
+          <div class="meta-row"><span class="meta-row__label">PEXELS</span><span class="meta-row__value" id="env-pexels">—</span></div>
+          <div class="meta-row"><span class="meta-row__label">PIXABAY</span><span class="meta-row__value" id="env-pixabay">—</span></div>
+        </div>
+        <div class="card">
+          <div class="card__corners"></div>
+          <div class="card__title">CACHE / WORK FILES</div>
+          <div class="text-sm text-muted">File sementara disimpan di <code>outputs/.work/</code> &amp; <code>outputs/.uploads/</code>.</div>
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- ============ RIGHT PANEL ============ -->
+  <aside class="right-panel" id="right-panel">
+
+    <!-- Right panel for SHORT MAKER -->
+    <div class="panel-content" data-panel="short-maker">
+
+      <div class="card">
+        <div class="card__corners"></div>
+        <div class="card__title">VIDEO &amp; FORMAT</div>
+
+        <div class="field">
+          <label class="field__label">Mode Transformasi</label>
+          <select class="select" id="sm-mode">
+            <option value="blur">Blur Area (sisi kiri/kanan)</option>
+            <option value="bars">Black Bars</option>
+            <option value="crop">Center Crop</option>
+            <option value="smart">Smart AI Crop</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label class="field__label">Aspect Ratio</label>
+          <div class="seg" id="sm-aspect">
+            <div class="seg__item active" data-v="9:16">9:16</div>
+            <div class="seg__item" data-v="16:9">16:9</div>
+            <div class="seg__item" data-v="1:1">1:1</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field__label">Kualitas</label>
+          <div class="seg" id="sm-quality">
+            <div class="seg__item active" data-v="1080p">1080P</div>
+            <div class="seg__item" data-v="720p">720P</div>
+            <div class="seg__item" data-v="480p">480P</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card__corners"></div>
+        <div class="card__title">AI &amp; SUBTITLE</div>
+        <label class="toggle">
+          <span class="toggle__label">Caption AI Otomatis</span>
+          <input type="checkbox" id="sm-caption" checked>
+          <span class="toggle__switch"></span>
+        </label>
+        <div class="text-xs text-muted">Translate &amp; animasi subtitle instan</div>
+      </div>
+
+      <div class="card">
+        <div class="card__corners"></div>
+        <div class="card__title">ADVANCED</div>
+        <div class="field">
+          <label class="field__label">Encoding</label>
+          <div class="seg" id="sm-encoding">
+            <div class="seg__item" data-v="quality">KUALITAS</div>
+            <div class="seg__item active" data-v="balanced">SEIMBANG</div>
+          </div>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="sm-gpu">
+          <span class="check__box"></span>
+          <span>Akselerasi GPU (NVIDIA NVENC)</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="sm-bypass">
+          <span class="check__box"></span>
+          <span>Bypass Copyright Meta</span>
+        </label>
+      </div>
+
+      <button class="btn-hero" id="sm-start">◈ INITIALIZE CONVERSION ◈</button>
+
+      <div class="card mt-3">
+        <div class="card__corners"></div>
+        <div class="card__title">PROGRESS LOG</div>
+        <div class="log-panel" id="sm-log"></div>
+      </div>
+
+      <div id="sm-result"></div>
+    </div>
+
+    <!-- Right panel for STORY TELLER -->
+    <div class="panel-content hidden" data-panel="story-teller">
+      <div class="card">
+        <div class="card__corners"></div>
+        <div class="card__title">VIDEO FORMAT</div>
+        <div class="field">
+          <label class="field__label">Aspect</label>
+          <div class="seg" id="st-aspect">
+            <div class="seg__item active" data-v="9:16">9:16</div>
+            <div class="seg__item" data-v="16:9">16:9</div>
+            <div class="seg__item" data-v="1:1">1:1</div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field__label">Kualitas</label>
+          <div class="seg" id="st-quality">
+            <div class="seg__item active" data-v="1080p">1080P</div>
+            <div class="seg__item" data-v="720p">720P</div>
+            <div class="seg__item" data-v="480p">480P</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card__corners"></div>
+        <div class="card__title">NARASI TTS</div>
+        <div class="field">
+          <label class="field__label">Voice</label>
+          <div class="seg" id="st-voice">
+            <div class="seg__item active" data-v="female">FEMALE</div>
+            <div class="seg__item" data-v="male">MALE</div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field__label">Kecepatan</label>
+          <div class="seg" id="st-speed">
+            <div class="seg__item" data-v="slow">SLOW</div>
+            <div class="seg__item active" data-v="normal">NORMAL</div>
+            <div class="seg__item" data-v="fast">FAST</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card__corners"></div>
+        <div class="card__title">BACKGROUND MUSIC</div>
+        <div class="field">
+          <select class="select" id="st-bgm">
+            <option value="epic">🎵 Epic</option>
+            <option value="sad">😢 Sad</option>
+            <option value="calm">🌿 Calm</option>
+            <option value="upbeat">⚡ Upbeat</option>
+            <option value="none">❌ Tanpa BGM</option>
+          </select>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="st-footage" checked>
+          <span class="check__box"></span>
+          <span>Gunakan Footage (Pexels/Pixabay)</span>
+        </label>
+      </div>
+
+      <button class="btn-hero" id="st-start">◈ GENERATE STORY VIDEO ◈</button>
+
+      <div class="card mt-3">
+        <div class="card__corners"></div>
+        <div class="card__title">PROGRESS LOG</div>
+        <div class="log-panel" id="st-log"></div>
+      </div>
+
+      <div id="st-result"></div>
+    </div>
+
+    <!-- Right panel for API MANAGER -->
+    <div class="panel-content hidden" data-panel="api-manager">
+      <div class="card">
+        <div class="card__corners"></div>
+        <div class="card__title">KEY STATUS</div>
+        <div class="meta-row"><span class="meta-row__label">Total</span><span class="meta-row__value" id="rp-total">0</span></div>
+        <div class="meta-row"><span class="meta-row__label">Active</span><span class="meta-row__value text-cyan" id="rp-active">0</span></div>
+        <div class="meta-row"><span class="meta-row__label">Quota</span><span class="meta-row__value" style="color:var(--amber)" id="rp-quota">0</span></div>
+        <div class="meta-row"><span class="meta-row__label">Invalid</span><span class="meta-row__value" style="color:var(--pink)" id="rp-invalid">0</span></div>
+      </div>
+      <div class="card">
+        <div class="card__corners"></div>
+        <div class="card__title">TIPS</div>
+        <div class="text-xs text-muted">
+          • Semakin banyak key, semakin panjang uptime rotation.<br>
+          • Key yang habis kuota otomatis coba ulang setelah 1 jam.<br>
+          • Gunakan mode <strong>Smart</strong> kalau usage key tidak merata.
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-content hidden" data-panel="outputs">
+      <div class="card">
+        <div class="card__corners"></div>
+        <div class="card__title">INFO</div>
+        <div class="text-xs text-muted">
+          Semua output disimpan di folder <code>outputs/</code> di root aplikasi.
+          Klik file untuk download atau preview.
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-content hidden" data-panel="settings">
+      <div class="card">
+        <div class="card__corners"></div>
+        <div class="card__title">HELP</div>
+        <div class="text-xs text-muted">
+          Untuk memperbarui konfigurasi, edit <code>.env</code> di root proyek
+          lalu restart server (tutup &amp; buka ulang Anz-Creator.exe).
+        </div>
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
