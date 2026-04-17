@@ -1,0 +1,56 @@
+# Environment & secrets
+.env
+keys.json
+*.key
+*.pem
+
+# Outputs (generated content)
+outputs/
+!outputs/.gitkeep
+
+# Assets that shouldn't be committed
+assets/bgm/*.mp3
+assets/temp/
+!assets/bgm/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# PyInstaller
+dist/
+build/
+*.spec
+!Anz-Creator.spec
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/
+.pytest_cache/
+*.egg-info/
+
+# FFmpeg temp
+*.tmp.mp4
+*.tmp.mp3
+ffmpeg2pass-*.log
