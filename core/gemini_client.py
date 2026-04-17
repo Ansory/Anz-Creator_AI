@@ -15,7 +15,7 @@ from .api_rotator import APIKeyRotator, AllKeysExhaustedError
 
 
 class GeminiClient:
-    MODEL_TEXT = "gemini-1.5-flash"
+    MODEL_TEXT = "gemini-3-flash-preview"
     MAX_RETRIES_PER_CALL = 10  # max swap key sebelum menyerah
 
     def __init__(self, rotator: APIKeyRotator):
