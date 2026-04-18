@@ -1,13 +1,8 @@
 name: Build Anz-Creator
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
-      - '.github/ISSUE_TEMPLATE/**'
+  # HANYA jalan kalau di-trigger manual dari tab Actions GitHub
+  # Push ke main TIDAK otomatis trigger build
   workflow_dispatch:
     inputs:
       bump:
@@ -48,11 +43,9 @@ jobs:
           fi
           echo "Latest tag: $LATEST_TAG"
 
-          # Strip 'v' prefix, split into parts
           VERSION=${LATEST_TAG#v}
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
 
-          # Determine bump type (default patch for push events)
           BUMP="${{ github.event.inputs.bump }}"
           if [ -z "$BUMP" ]; then
             BUMP="patch"
@@ -80,11 +73,24 @@ jobs:
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-      - name: Create and push tag
+      - name: Update version.py with new version
+        shell: bash
+        run: |
+          echo "VERSION = '${{ steps.bump.outputs.version }}'" > version.py
+          echo "version.py updated: $(cat version.py)"
+
+      - name: Commit updated version.py
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.py
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.tag }}" || echo "Nothing to commit"
+          git push origin HEAD:main
+
+      - name: Create and push tag
+        shell: bash
+        run: |
           git tag -a "${{ steps.bump.outputs.tag }}" -m "Release ${{ steps.bump.outputs.tag }}"
           git push origin "${{ steps.bump.outputs.tag }}"
 
@@ -123,21 +129,20 @@ jobs:
           Copy-Item $ffprobeBin.FullName -Destination bin\ffprobe.exe
           Remove-Item -Recurse -Force ffmpeg-tmp, ffmpeg.zip
 
-      - name: Create version file
-        shell: pwsh
-        run: |
-          $version = "${{ needs.version.outputs.version }}"
-          "VERSION = '$version'" | Out-File -FilePath version.py -Encoding utf8
-          echo "APP_VERSION=$version" >> $env:GITHUB_ENV
-
       - name: Build .exe with PyInstaller
         shell: pwsh
         run: |
+          # version.py sudah di-update & di-commit oleh job 'version' di atas
+          # server.py akan import VERSION dari version.py otomatis saat runtime
+          $version = "${{ needs.version.outputs.version }}"
+          echo "Building version: $version"
+
           pyinstaller --onefile --noconsole `
             --name "Anz-Creator" `
             --add-data "static;static" `
             --add-data "server.py;." `
             --add-data "core;core" `
+            --add-data "version.py;." `
             --add-data ".env.example;." `
             --add-binary "bin\ffmpeg.exe;." `
             --add-binary "bin\ffprobe.exe;." `
@@ -153,6 +158,7 @@ jobs:
       - name: Prepare release folder
         shell: pwsh
         run: |
+          $version = "${{ needs.version.outputs.version }}"
           New-Item -ItemType Directory -Force -Path "release\Anz-Creator"
           Copy-Item "dist\Anz-Creator.exe" -Destination "release\Anz-Creator\"
           Copy-Item ".env.example" -Destination "release\Anz-Creator\"
@@ -164,7 +170,8 @@ jobs:
       - name: Create ZIP archive
         shell: pwsh
         run: |
-          $zipName = "Anz-Creator-v$env:APP_VERSION-windows.zip"
+          $version = "${{ needs.version.outputs.version }}"
+          $zipName = "Anz-Creator-v$version-windows.zip"
           Compress-Archive -Path "release\Anz-Creator" -DestinationPath $zipName
           echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
 
@@ -187,17 +194,17 @@ jobs:
           body: |
             ## Anz-Creator ${{ needs.version.outputs.tag }}
 
-            **Windows build** — portable `.exe` with FFmpeg bundled.
+            **Windows build** — portable `.exe` dengan FFmpeg bundled.
 
             ### Install
-            1. Download `${{ env.ZIP_NAME }}` below
-            2. Extract to a folder
-            3. Copy `.env.example` to `.env` and fill in your API keys
+            1. Download `${{ env.ZIP_NAME }}` di bawah
+            2. Extract ke folder
+            3. Copy `.env.example` ke `.env` dan isi API key kamu
             4. Double-click `Anz-Creator.exe`
 
             ### Requirements
             - Windows 10 / 11
-            - Google Chrome (for UI)
+            - Google Chrome (untuk UI)
             - Gemini / Pexels / Pixabay API keys
 
-            Built automatically by GitHub Actions — auto-incremented from previous release.
+            Built manually via GitHub Actions · version auto-increment dari tag sebelumnya.
