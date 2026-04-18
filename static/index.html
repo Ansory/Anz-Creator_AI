@@ -8,8 +8,87 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
+<style>
+  /* ---- Restart / Shutdown buttons ---- */
+  .sys-actions {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border-glow);
+  }
+  .btn-sys {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 7px 6px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    text-transform: uppercase;
+    border: 1px solid;
+    transition: all 0.15s;
+  }
+  .btn-sys--restart {
+    color: var(--amber);
+    border-color: var(--amber);
+    background: rgba(255,180,0,0.06);
+  }
+  .btn-sys--restart:hover {
+    background: rgba(255,180,0,0.18);
+    box-shadow: 0 0 10px rgba(255,180,0,0.3);
+  }
+  .btn-sys--shutdown {
+    color: var(--pink);
+    border-color: var(--pink);
+    background: rgba(255,0,110,0.06);
+  }
+  .btn-sys--shutdown:hover {
+    background: rgba(255,0,110,0.18);
+    box-shadow: 0 0 10px rgba(255,0,110,0.3);
+  }
+  .btn-sys:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* overlay saat restart/shutdown */
+  #sys-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(2,4,8,0.92);
+    z-index: 9999;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+  #sys-overlay.show { display: flex; }
+  #sys-overlay .overlay-icon { font-size: 40px; }
+  #sys-overlay .overlay-title { font-size: 16px; letter-spacing: 0.2em; color: var(--cyan); }
+  #sys-overlay .overlay-msg { font-size: 12px; color: var(--text-muted); }
+  #sys-overlay .overlay-spinner {
+    width: 28px; height: 28px;
+    border: 2px solid var(--border-glow);
+    border-top-color: var(--cyan);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+</style>
 </head>
 <body>
+
+<!-- Overlay restart/shutdown -->
+<div id="sys-overlay">
+  <div class="overlay-icon" id="overlay-icon">⟳</div>
+  <div class="overlay-title" id="overlay-title">RESTARTING...</div>
+  <div class="overlay-spinner" id="overlay-spinner"></div>
+  <div class="overlay-msg" id="overlay-msg">Menunggu server kembali online...</div>
+</div>
+
 <div id="app">
 
   <!-- ============ SIDEBAR ============ -->
@@ -17,7 +96,7 @@
     <div class="logo">
       <div class="logo__title">◈ ANZ-CREATOR</div>
       <div class="logo__tag">AI CONTENT STUDIO</div>
-      <div class="logo__status"><span class="dot"></span> SYS ONLINE :<span id="server-port">8080</span></div>
+      <div class="logo__status"><span class="dot"></span> SYS ONLINE :<span id="server-port">2712</span></div>
     </div>
 
     <nav>
@@ -72,6 +151,12 @@
         <span class="monitor-val" id="ram-val">0%</span>
       </div>
     </div>
+
+    <!-- Tombol Restart & Shutdown -->
+    <div class="sys-actions">
+      <button class="btn-sys btn-sys--restart" id="btn-restart" title="Restart server">⟳ RESTART</button>
+      <button class="btn-sys btn-sys--shutdown" id="btn-shutdown" title="Matikan server">⏻ SHUTDOWN</button>
+    </div>
   </aside>
 
   <!-- ============ MAIN ============ -->
@@ -89,23 +174,19 @@
 
       <!-- =============== VIEW: SHORT MAKER =============== -->
       <section class="view active" data-view="short-maker">
-
         <div class="card">
           <div class="card__corners"></div>
           <div class="card__title">INPUT SOURCE</div>
-
           <div class="tabs">
             <div class="tabs__tab active" data-tab="url">YOUTUBE URL</div>
             <div class="tabs__tab" data-tab="file">UPLOAD FILE</div>
           </div>
-
           <div class="tab-content active" data-tab="url">
             <div class="field">
               <label class="field__label">Youtube URL</label>
               <input class="input" id="sm-url" placeholder="https://youtube.com/watch?v=..." />
             </div>
           </div>
-
           <div class="tab-content" data-tab="file">
             <div class="field">
               <label class="field__label">Pilih Video</label>
@@ -129,7 +210,6 @@
         <div class="card">
           <div class="card__corners"></div>
           <div class="card__title">CLIP CUTTER :: AI VIRAL SCAN</div>
-
           <div class="field-row">
             <div class="field">
               <label class="field__label">Topik Konten</label>
@@ -153,7 +233,6 @@
               </select>
             </div>
           </div>
-
           <div id="sm-custom-time" class="field-row hidden">
             <div class="field">
               <label class="field__label">Mulai (HH:MM:SS)</label>
@@ -164,28 +243,22 @@
               <input class="input" id="sm-end" placeholder="00:00:30" />
             </div>
           </div>
-
           <div class="flex gap-2 mt-2">
             <button class="btn" id="sm-find-viral">◎ Cari Momen Viral (AI)</button>
           </div>
-
           <div id="sm-viral-list" class="mt-3"></div>
         </div>
-
       </section>
 
       <!-- =============== VIEW: STORY TELLER =============== -->
       <section class="view" data-view="story-teller">
-
         <div class="card">
           <div class="card__corners"></div>
           <div class="card__title">STORY INPUT</div>
-
           <div class="field">
             <label class="field__label">Judul / Topik Cerita</label>
             <input class="input" id="st-title" placeholder="Misal: Kisah pengusaha muda yang bangkit dari kegagalan" />
           </div>
-
           <div class="field-row">
             <div class="field">
               <label class="field__label">Genre</label>
@@ -201,7 +274,6 @@
               </select>
             </div>
           </div>
-
           <div class="field-row">
             <div class="field">
               <label class="field__label">Panjang Cerita</label>
@@ -219,32 +291,26 @@
               </select>
             </div>
           </div>
-
           <div class="flex gap-2 mt-2">
             <button class="btn" id="st-preview">◎ Preview Naskah</button>
           </div>
         </div>
-
         <div class="card">
           <div class="card__corners"></div>
           <div class="card__title">NASKAH PREVIEW</div>
           <div id="st-script-list" class="empty-state">Klik "Preview Naskah" untuk melihat draf cerita</div>
         </div>
-
       </section>
 
       <!-- =============== VIEW: API KEY MANAGER =============== -->
       <section class="view" data-view="api-manager">
-
         <div class="card">
           <div class="card__corners"></div>
           <div class="card__title">API KEY ROTATION :: INPUT</div>
-
           <div class="field">
             <label class="field__label">Paste Banyak Key (1 baris = 1 key)</label>
             <textarea class="textarea" id="keys-textarea" rows="6" placeholder="AIza...&#10;AIza...&#10;AIza..."></textarea>
           </div>
-
           <div class="flex gap-2">
             <button class="btn" id="keys-add">◎ Tambah Keys</button>
             <label class="btn btn--ghost" for="keys-file">⤓ Import .txt</label>
@@ -252,7 +318,6 @@
             <button class="btn btn--danger" id="keys-clear">✕ Hapus Semua</button>
           </div>
         </div>
-
         <div class="card">
           <div class="card__corners"></div>
           <div class="card__title">ROTATION MODE</div>
@@ -265,7 +330,6 @@
             <strong>Smart</strong> — pilih key dengan usage terkecil dulu.
           </div>
         </div>
-
         <div class="card">
           <div class="card__corners"></div>
           <div class="card__title">
@@ -278,7 +342,6 @@
             <div class="empty-state">Belum ada API key. Tambah di atas.</div>
           </div>
         </div>
-
       </section>
 
       <!-- =============== VIEW: OUTPUTS =============== -->
@@ -295,9 +358,14 @@
         <div class="card">
           <div class="card__corners"></div>
           <div class="card__title">SERVER / SYSTEM</div>
-          <div class="meta-row"><span class="meta-row__label">Port</span><span class="meta-row__value" id="s-port">8080</span></div>
-          <div class="meta-row"><span class="meta-row__label">Version</span><span class="meta-row__value">1.0.0</span></div>
+          <div class="meta-row"><span class="meta-row__label">Port</span><span class="meta-row__value" id="s-port">2712</span></div>
+          <div class="meta-row"><span class="meta-row__label">Version</span><span class="meta-row__value" id="s-version">—</span></div>
           <div class="meta-row"><span class="meta-row__label">Host</span><span class="meta-row__value">127.0.0.1 (localhost)</span></div>
+          <div class="divider"></div>
+          <div class="flex gap-2">
+            <button class="btn" id="settings-restart" style="color:var(--amber);border-color:var(--amber)">⟳ RESTART SERVER</button>
+            <button class="btn btn--danger" id="settings-shutdown">⏻ SHUTDOWN SERVER</button>
+          </div>
         </div>
         <div class="card">
           <div class="card__corners"></div>
@@ -307,7 +375,7 @@
             Edit <code>.env</code> lalu restart server.
           </div>
           <div class="divider"></div>
-          <div class="meta-row"><span class="meta-row__label">GEMINI</span><span class="meta-row__value"><span id="env-gemini">via API Key Manager</span></span></div>
+          <div class="meta-row"><span class="meta-row__label">GEMINI</span><span class="meta-row__value">via API Key Manager</span></div>
           <div class="meta-row"><span class="meta-row__label">PEXELS</span><span class="meta-row__value" id="env-pexels">—</span></div>
           <div class="meta-row"><span class="meta-row__label">PIXABAY</span><span class="meta-row__value" id="env-pixabay">—</span></div>
         </div>
@@ -319,19 +387,15 @@
       </section>
 
     </div>
-
   </main>
 
   <!-- ============ RIGHT PANEL ============ -->
   <aside class="right-panel" id="right-panel">
 
-    <!-- Right panel for SHORT MAKER -->
     <div class="panel-content" data-panel="short-maker">
-
       <div class="card">
         <div class="card__corners"></div>
         <div class="card__title">VIDEO &amp; FORMAT</div>
-
         <div class="field">
           <label class="field__label">Mode Transformasi</label>
           <select class="select" id="sm-mode">
@@ -341,7 +405,6 @@
             <option value="smart">Smart AI Crop</option>
           </select>
         </div>
-
         <div class="field">
           <label class="field__label">Aspect Ratio</label>
           <div class="seg" id="sm-aspect">
@@ -350,7 +413,6 @@
             <div class="seg__item" data-v="1:1">1:1</div>
           </div>
         </div>
-
         <div class="field">
           <label class="field__label">Kualitas</label>
           <div class="seg" id="sm-quality">
@@ -360,7 +422,6 @@
           </div>
         </div>
       </div>
-
       <div class="card">
         <div class="card__corners"></div>
         <div class="card__title">AI &amp; SUBTITLE</div>
@@ -369,9 +430,7 @@
           <input type="checkbox" id="sm-caption" checked>
           <span class="toggle__switch"></span>
         </label>
-        <div class="text-xs text-muted">Translate &amp; animasi subtitle instan</div>
       </div>
-
       <div class="card">
         <div class="card__corners"></div>
         <div class="card__title">ADVANCED</div>
@@ -393,19 +452,15 @@
           <span>Bypass Copyright Meta</span>
         </label>
       </div>
-
       <button class="btn-hero" id="sm-start">◈ INITIALIZE CONVERSION ◈</button>
-
       <div class="card mt-3">
         <div class="card__corners"></div>
         <div class="card__title">PROGRESS LOG</div>
         <div class="log-panel" id="sm-log"></div>
       </div>
-
       <div id="sm-result"></div>
     </div>
 
-    <!-- Right panel for STORY TELLER -->
     <div class="panel-content hidden" data-panel="story-teller">
       <div class="card">
         <div class="card__corners"></div>
@@ -427,7 +482,6 @@
           </div>
         </div>
       </div>
-
       <div class="card">
         <div class="card__corners"></div>
         <div class="card__title">NARASI TTS</div>
@@ -447,7 +501,6 @@
           </div>
         </div>
       </div>
-
       <div class="card">
         <div class="card__corners"></div>
         <div class="card__title">BACKGROUND MUSIC</div>
@@ -466,19 +519,15 @@
           <span>Gunakan Footage (Pexels/Pixabay)</span>
         </label>
       </div>
-
       <button class="btn-hero" id="st-start">◈ GENERATE STORY VIDEO ◈</button>
-
       <div class="card mt-3">
         <div class="card__corners"></div>
         <div class="card__title">PROGRESS LOG</div>
         <div class="log-panel" id="st-log"></div>
       </div>
-
       <div id="st-result"></div>
     </div>
 
-    <!-- Right panel for API MANAGER -->
     <div class="panel-content hidden" data-panel="api-manager">
       <div class="card">
         <div class="card__corners"></div>
@@ -503,20 +552,25 @@
       <div class="card">
         <div class="card__corners"></div>
         <div class="card__title">INFO</div>
-        <div class="text-xs text-muted">
-          Semua output disimpan di folder <code>outputs/</code> di root aplikasi.
-          Klik file untuk download atau preview.
-        </div>
+        <div class="text-xs text-muted">Semua output disimpan di folder <code>outputs/</code>.</div>
       </div>
     </div>
 
     <div class="panel-content hidden" data-panel="settings">
       <div class="card">
         <div class="card__corners"></div>
+        <div class="card__title">SERVER CONTROL</div>
+        <div class="text-xs text-muted mb-2">Restart diperlukan setelah edit <code>.env</code>.</div>
+        <div class="flex flex-col gap-2">
+          <button class="btn" id="rp-restart" style="color:var(--amber);border-color:var(--amber);width:100%">⟳ RESTART SERVER</button>
+          <button class="btn btn--danger" id="rp-shutdown" style="width:100%">⏻ SHUTDOWN SERVER</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card__corners"></div>
         <div class="card__title">HELP</div>
         <div class="text-xs text-muted">
-          Untuk memperbarui konfigurasi, edit <code>.env</code> di root proyek
-          lalu restart server (tutup &amp; buka ulang Anz-Creator.exe).
+          Edit <code>.env</code> di root proyek lalu klik Restart untuk terapkan perubahan.
         </div>
       </div>
     </div>
@@ -527,5 +581,80 @@
 <div class="toast-container" id="toasts"></div>
 
 <script src="/js/app.js"></script>
+<script>
+/* ---- Restart / Shutdown logic ---- */
+const overlay = document.getElementById('sys-overlay');
+const overlayIcon = document.getElementById('overlay-icon');
+const overlayTitle = document.getElementById('overlay-title');
+const overlayMsg = document.getElementById('overlay-msg');
+const overlaySpinner = document.getElementById('overlay-spinner');
+
+function showOverlay(mode) {
+  if (mode === 'restart') {
+    overlayIcon.textContent = '⟳';
+    overlayTitle.textContent = 'RESTARTING...';
+    overlayMsg.textContent = 'Menunggu server kembali online...';
+    overlaySpinner.style.display = 'block';
+  } else {
+    overlayIcon.textContent = '⏻';
+    overlayTitle.textContent = 'SERVER OFF';
+    overlayMsg.textContent = 'Server telah dimatikan. Tutup tab ini atau jalankan ulang manual.';
+    overlaySpinner.style.display = 'none';
+  }
+  overlay.classList.add('show');
+}
+
+async function doRestart() {
+  if (!confirm('Restart server sekarang?')) return;
+  showOverlay('restart');
+  try {
+    await fetch('/api/system/restart', { method: 'POST' });
+  } catch (_) {}
+  // Poll sampai server online lagi
+  let attempts = 0;
+  const poll = setInterval(async () => {
+    attempts++;
+    try {
+      const r = await fetch('/api/health');
+      if (r.ok) {
+        clearInterval(poll);
+        overlay.classList.remove('show');
+        toast('✓ Server berhasil restart', 'ok');
+        loadKeys();
+      }
+    } catch (_) {}
+    if (attempts > 40) {
+      clearInterval(poll);
+      overlayMsg.textContent = 'Server tidak merespons. Coba refresh halaman manual.';
+    }
+  }, 1000);
+}
+
+async function doShutdown() {
+  if (!confirm('Matikan server? Kamu perlu jalankan ulang manual dari terminal.')) return;
+  try {
+    await fetch('/api/system/shutdown', { method: 'POST' });
+  } catch (_) {}
+  showOverlay('shutdown');
+}
+
+// Sidebar buttons
+document.getElementById('btn-restart').addEventListener('click', doRestart);
+document.getElementById('btn-shutdown').addEventListener('click', doShutdown);
+
+// Settings page buttons
+document.getElementById('settings-restart').addEventListener('click', doRestart);
+document.getElementById('settings-shutdown').addEventListener('click', doShutdown);
+
+// Right panel settings buttons
+document.getElementById('rp-restart').addEventListener('click', doRestart);
+document.getElementById('rp-shutdown').addEventListener('click', doShutdown);
+
+// Update settings page version
+API.health().then(h => {
+  const el = document.getElementById('s-version');
+  if (el && h.version) el.textContent = h.version;
+});
+</script>
 </body>
 </html>
