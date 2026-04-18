@@ -1,15 +1,17 @@
 """
 Anz-Creator FastAPI Server.
 Jalankan: python server.py
-Default port: 8080
+Default port: 2712
 """
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import shutil
+import signal
+import subprocess
+import sys
 import time
 import traceback
 import uuid
@@ -20,9 +22,9 @@ logger = logging.getLogger("anz-creator.server")
 
 import psutil
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -49,30 +51,21 @@ PORT = int(os.getenv("SERVER_PORT", "2712"))
 _rotator = get_rotator()
 _env_keys = os.getenv("GEMINI_API_KEYS", "").strip()
 if _env_keys:
-    _rotator.add_keys([k.strip() for k in _env_keys.split(",") if k.strip()],
-                      label_prefix="env-")
+    _rotator.add_keys([k.strip() for k in _env_keys.split(",") if k.strip()], label_prefix="env-")
 
 app = FastAPI(title="Anz-Creator", version=VERSION)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 JOBS: Dict[str, Dict[str, Any]] = {}
-
 
 def _new_job() -> str:
     jid = uuid.uuid4().hex
     JOBS[jid] = {"id": jid, "status": "queued", "progress": [], "result": None, "error": None, "created_at": time.time()}
     return jid
 
-
 def _log_to_job(jid: str, msg: str) -> None:
     if jid in JOBS:
         JOBS[jid]["progress"].append({"t": time.time(), "msg": msg})
-
 
 def _ensure_keys_available() -> None:
     r = get_rotator()
@@ -82,13 +75,13 @@ def _ensure_keys_available() -> None:
     if stats.get("active", 0) == 0:
         raise HTTPException(status_code=503, detail={"code": "KEYS_EXHAUSTED", "message": f"Semua {stats['total']} API key sudah mencapai limit quota atau tidak valid.", "hint": "Free tier Gemini: 15 RPM, 1500 requests/hari per key."})
 
-
 def _format_exception_error(e: Exception) -> Dict[str, Any]:
     tb = traceback.format_exc()
     logger.error(f"Request failed: {e}\n{tb}")
     return {"code": e.__class__.__name__, "message": str(e) or "Unknown error", "traceback": tb.split("\n")[-10:]}
 
 
+# --------------------------------------------------------------- Schemas
 class KeysAddBody(BaseModel):
     keys: List[str]
 
@@ -131,6 +124,7 @@ class FindViralBody(BaseModel):
     language: str = "id"
 
 
+# --------------------------------------------------------------- System
 @app.get("/api/health")
 def health():
     return {"status": "online", "version": VERSION}
@@ -139,8 +133,32 @@ def health():
 def system_resources():
     cpu = psutil.cpu_percent(interval=0.3)
     mem = psutil.virtual_memory()
-    return {"cpu_percent": round(cpu, 1), "ram_percent": round(mem.percent, 1), "ram_used_gb": round(mem.used / (1024 ** 3), 2), "ram_total_gb": round(mem.total / (1024 ** 3), 2)}
+    return {"cpu_percent": round(cpu, 1), "ram_percent": round(mem.percent, 1), "ram_used_gb": round(mem.used / (1024**3), 2), "ram_total_gb": round(mem.total / (1024**3), 2)}
 
+@app.post("/api/system/shutdown")
+async def system_shutdown():
+    """Matikan server."""
+    async def _do():
+        await asyncio.sleep(0.6)
+        logger.info("Shutdown via API")
+        os.kill(os.getpid(), signal.SIGTERM)
+    asyncio.create_task(_do())
+    return {"ok": True, "message": "Server shutting down..."}
+
+@app.post("/api/system/restart")
+async def system_restart():
+    """Restart server — spawn proses baru lalu kill yang lama."""
+    async def _do():
+        await asyncio.sleep(0.6)
+        logger.info("Restart via API")
+        subprocess.Popen([sys.executable, str(Path(__file__).resolve())], cwd=str(ROOT))
+        await asyncio.sleep(1.2)
+        os.kill(os.getpid(), signal.SIGTERM)
+    asyncio.create_task(_do())
+    return {"ok": True, "message": "Server restarting..."}
+
+
+# --------------------------------------------------------------- Keys
 @app.get("/api/keys")
 def list_keys():
     r = get_rotator()
@@ -181,6 +199,8 @@ def set_mode(body: KeysModeBody):
         raise HTTPException(400, str(e))
     return {"mode": r.get_mode()}
 
+
+# --------------------------------------------------------------- Upload
 @app.post("/api/upload")
 async def upload_video(file: UploadFile = File(...)):
     if not file.filename:
@@ -191,6 +211,8 @@ async def upload_video(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, f)
     return {"path": str(dst), "name": file.filename, "size": dst.stat().st_size}
 
+
+# --------------------------------------------------------------- Short Maker
 @app.post("/api/short-maker/find-viral")
 def short_maker_find_viral(body: FindViralBody):
     _ensure_keys_available()
@@ -224,6 +246,8 @@ async def short_maker_start(body: ShortMakerBody):
     asyncio.create_task(run())
     return {"job_id": jid}
 
+
+# --------------------------------------------------------------- Story Teller
 @app.post("/api/story-teller/preview")
 def story_preview(body: StoryTellerBody):
     _ensure_keys_available()
@@ -258,6 +282,8 @@ async def story_start(body: StoryTellerBody):
     asyncio.create_task(run())
     return {"job_id": jid}
 
+
+# --------------------------------------------------------------- Job
 @app.get("/api/job/{jid}")
 def job_status(jid: str):
     if jid not in JOBS:
@@ -284,11 +310,13 @@ async def job_ws(ws: WebSocket, jid: str):
     except WebSocketDisconnect:
         return
 
+
+# --------------------------------------------------------------- Outputs
 @app.get("/api/outputs")
 def list_outputs():
     items = []
     for p in sorted(OUTPUT_DIR.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
-        items.append({"name": p.name, "url": _to_url(str(p)), "size_mb": round(p.stat().st_size / (1024 ** 2), 2), "modified": p.stat().st_mtime})
+        items.append({"name": p.name, "url": _to_url(str(p)), "size_mb": round(p.stat().st_size / (1024**2), 2), "modified": p.stat().st_mtime})
     return {"items": items}
 
 @app.get("/files/{name}")
@@ -313,7 +341,6 @@ def favicon():
     fav = STATIC_DIR / "favicon.ico"
     if fav.exists():
         return FileResponse(fav, media_type="image/x-icon")
-    from fastapi import Response
     return Response(status_code=204)
 
 if STATIC_DIR.exists():
