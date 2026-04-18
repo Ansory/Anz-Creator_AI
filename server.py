@@ -1,6 +1,5 @@
 """
 Anz-Creator FastAPI Server.
-Jalankan: python server.py
 Default port: 2712
 """
 from __future__ import annotations
@@ -32,38 +31,48 @@ from core.api_rotator import AllKeysExhaustedError, get_rotator
 from core.short_maker import ShortMaker, ShortMakerOptions
 from core.story_teller import StoryTeller, StoryTellerOptions
 
-# --------------------------------------------------------------- ROOT dulu sebelum apapun
-# Selalu resolve ke folder tempat server.py berada,
-# bukan current working directory — ini fix utama agar .env selalu terbaca
+# ── ROOT: selalu folder tempat server.py berada ─────────────────────────────
 ROOT = Path(__file__).resolve().parent
 
-# --------------------------------------------------------------- Load .env dari folder server.py
-# override=True supaya nilai di .env selalu menang atas env system
+# ── Load .env dari ROOT dengan override=True ─────────────────────────────────
 load_dotenv(dotenv_path=ROOT / ".env", override=True)
 
-# --------------------------------------------------------------- Version
+# ── Version ──────────────────────────────────────────────────────────────────
 try:
     from version import VERSION
 except ImportError:
     VERSION = "dev"
 
-# --------------------------------------------------------------- Config
+# ── Config ───────────────────────────────────────────────────────────────────
 STATIC_DIR = ROOT / "static"
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(ROOT / "outputs"))).resolve()
 UPLOAD_DIR = OUTPUT_DIR / ".uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 PORT = int(os.getenv("SERVER_PORT", "2712"))
 
-# --------------------------------------------------------------- Rotator + env keys
+# ── Rotator: load keys dari .env + keys.json ─────────────────────────────────
 _rotator = get_rotator()
-_env_keys = os.getenv("GEMINI_API_KEYS", "").strip()
-if _env_keys:
-    _rotator.add_keys(
-        [k.strip() for k in _env_keys.split(",") if k.strip()],
-        label_prefix="env-"
-    )
 
-# --------------------------------------------------------------- App
+def _sync_env_keys() -> int:
+    """
+    Baca GEMINI_API_KEYS dari .env dan tambahkan ke rotator.
+    Dipanggil saat startup dan saat restart.
+    Duplikat otomatis di-skip oleh rotator.
+    """
+    env_keys = os.getenv("GEMINI_API_KEYS", "").strip()
+    if not env_keys:
+        return 0
+    keys = [k.strip() for k in env_keys.split(",") if k.strip()]
+    added = _rotator.add_keys(keys, label_prefix="env-")
+    if added:
+        logger.info(f"[startup] {added} key baru dari .env ditambahkan ke rotator")
+    else:
+        logger.info(f"[startup] Key dari .env sudah ada di rotator (tidak ada duplikat)")
+    return added
+
+_sync_env_keys()
+
+# ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Anz-Creator", version=VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -72,7 +81,8 @@ JOBS: Dict[str, Dict[str, Any]] = {}
 
 def _new_job() -> str:
     jid = uuid.uuid4().hex
-    JOBS[jid] = {"id": jid, "status": "queued", "progress": [], "result": None, "error": None, "created_at": time.time()}
+    JOBS[jid] = {"id": jid, "status": "queued", "progress": [],
+                 "result": None, "error": None, "created_at": time.time()}
     return jid
 
 
@@ -101,10 +111,11 @@ def _ensure_keys_available() -> None:
 def _format_exception_error(e: Exception) -> Dict[str, Any]:
     tb = traceback.format_exc()
     logger.error(f"Request failed: {e}\n{tb}")
-    return {"code": e.__class__.__name__, "message": str(e) or "Unknown error", "traceback": tb.split("\n")[-10:]}
+    return {"code": e.__class__.__name__, "message": str(e) or "Unknown error",
+            "traceback": tb.split("\n")[-10:]}
 
 
-# --------------------------------------------------------------- Schemas
+# ── Schemas ───────────────────────────────────────────────────────────────────
 class KeysAddBody(BaseModel):
     keys: List[str]
 
@@ -147,28 +158,23 @@ class FindViralBody(BaseModel):
     language: str = "id"
 
 
-# --------------------------------------------------------------- System
+# ── System endpoints ──────────────────────────────────────────────────────────
 @app.get("/api/health")
 def health():
-    # Sertakan port agar frontend bisa sinkron tampilan
     return {"status": "online", "version": VERSION, "port": PORT}
 
 @app.get("/api/system/resources")
 def system_resources():
     cpu = psutil.cpu_percent(interval=0.3)
     mem = psutil.virtual_memory()
-    return {
-        "cpu_percent": round(cpu, 1),
-        "ram_percent": round(mem.percent, 1),
-        "ram_used_gb": round(mem.used / (1024**3), 2),
-        "ram_total_gb": round(mem.total / (1024**3), 2),
-    }
+    return {"cpu_percent": round(cpu, 1), "ram_percent": round(mem.percent, 1),
+            "ram_used_gb": round(mem.used / (1024**3), 2),
+            "ram_total_gb": round(mem.total / (1024**3), 2)}
 
 @app.post("/api/system/shutdown")
 async def system_shutdown():
     async def _do():
         await asyncio.sleep(0.6)
-        logger.info("Shutdown via API")
         os.kill(os.getpid(), signal.SIGTERM)
     asyncio.create_task(_do())
     return {"ok": True, "message": "Server shutting down..."}
@@ -177,7 +183,6 @@ async def system_shutdown():
 async def system_restart():
     async def _do():
         await asyncio.sleep(0.6)
-        logger.info("Restart via API")
         subprocess.Popen([sys.executable, str(Path(__file__).resolve())], cwd=str(ROOT))
         await asyncio.sleep(1.2)
         os.kill(os.getpid(), signal.SIGTERM)
@@ -185,7 +190,7 @@ async def system_restart():
     return {"ok": True, "message": "Server restarting..."}
 
 
-# --------------------------------------------------------------- Keys
+# ── Keys ──────────────────────────────────────────────────────────────────────
 @app.get("/api/keys")
 def list_keys():
     r = get_rotator()
@@ -227,7 +232,7 @@ def set_mode(body: KeysModeBody):
     return {"mode": r.get_mode()}
 
 
-# --------------------------------------------------------------- Upload
+# ── Upload ────────────────────────────────────────────────────────────────────
 @app.post("/api/upload")
 async def upload_video(file: UploadFile = File(...)):
     if not file.filename:
@@ -239,22 +244,23 @@ async def upload_video(file: UploadFile = File(...)):
     return {"path": str(dst), "name": file.filename, "size": dst.stat().st_size}
 
 
-# --------------------------------------------------------------- Short Maker
+# ── Short Maker ───────────────────────────────────────────────────────────────
 @app.post("/api/short-maker/find-viral")
 def short_maker_find_viral(body: FindViralBody):
     _ensure_keys_available()
     if not body.source or not body.source.strip():
-        raise HTTPException(status_code=400, detail={"code": "MISSING_SOURCE", "message": "URL YouTube atau file path wajib diisi."})
+        raise HTTPException(400, detail={"code": "MISSING_SOURCE",
+                                         "message": "URL YouTube atau file path wajib diisi."})
     sm = ShortMaker(get_rotator(), OUTPUT_DIR)
     try:
         result = sm.find_viral_moments(body.source, body.source_type, body.topic, body.language)
         return {"ok": True, "data": result}
     except AllKeysExhaustedError as e:
-        raise HTTPException(status_code=503, detail={"code": "KEYS_EXHAUSTED", "message": str(e)})
+        raise HTTPException(503, detail={"code": "KEYS_EXHAUSTED", "message": str(e)})
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=_format_exception_error(e))
+        raise HTTPException(500, detail=_format_exception_error(e))
 
 @app.post("/api/short-maker/start")
 async def short_maker_start(body: ShortMakerBody):
@@ -266,16 +272,11 @@ async def short_maker_start(body: ShortMakerBody):
             sm = ShortMaker(get_rotator(), OUTPUT_DIR)
             result = await asyncio.to_thread(sm.process, opts, lambda m: _log_to_job(jid, m))
             JOBS[jid]["result"] = {
-                "output_path": result.output_path,
-                "output_url": _to_url(result.output_path),
-                "thumbnail_url": _to_url(result.thumbnail_path),
-                "title": result.title,
-                "description": result.description,
-                "tags": result.tags,
-                "pinned_comment": result.pinned_comment,
-                "duration": result.duration,
-                "start_seconds": result.start_seconds,
-                "end_seconds": result.end_seconds,
+                "output_path": result.output_path, "output_url": _to_url(result.output_path),
+                "thumbnail_url": _to_url(result.thumbnail_path), "title": result.title,
+                "description": result.description, "tags": result.tags,
+                "pinned_comment": result.pinned_comment, "duration": result.duration,
+                "start_seconds": result.start_seconds, "end_seconds": result.end_seconds,
             }
             JOBS[jid]["status"] = "done"
         except Exception as e:
@@ -285,27 +286,26 @@ async def short_maker_start(body: ShortMakerBody):
     return {"job_id": jid}
 
 
-# --------------------------------------------------------------- Story Teller
+# ── Story Teller ──────────────────────────────────────────────────────────────
 @app.post("/api/story-teller/preview")
 def story_preview(body: StoryTellerBody):
     _ensure_keys_available()
     if not body.title or not body.title.strip():
-        raise HTTPException(status_code=400, detail={"code": "MISSING_TITLE", "message": "Judul/topik cerita wajib diisi."})
-    st = StoryTeller(
-        get_rotator(), OUTPUT_DIR,
-        pexels_key=os.getenv("PEXELS_API_KEY", ""),
-        pixabay_key=os.getenv("PIXABAY_API_KEY", ""),
-    )
+        raise HTTPException(400, detail={"code": "MISSING_TITLE",
+                                         "message": "Judul/topik cerita wajib diisi."})
+    st = StoryTeller(get_rotator(), OUTPUT_DIR,
+                     pexels_key=os.getenv("PEXELS_API_KEY", ""),
+                     pixabay_key=os.getenv("PIXABAY_API_KEY", ""))
     try:
         opts = StoryTellerOptions(**body.model_dump())
         scenes = st.preview_script(opts)
         return {"ok": True, "scenes": scenes}
     except AllKeysExhaustedError as e:
-        raise HTTPException(status_code=503, detail={"code": "KEYS_EXHAUSTED", "message": str(e)})
+        raise HTTPException(503, detail={"code": "KEYS_EXHAUSTED", "message": str(e)})
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=_format_exception_error(e))
+        raise HTTPException(500, detail=_format_exception_error(e))
 
 @app.post("/api/story-teller/start")
 async def story_start(body: StoryTellerBody):
@@ -314,19 +314,14 @@ async def story_start(body: StoryTellerBody):
         JOBS[jid]["status"] = "running"
         try:
             opts = StoryTellerOptions(**body.model_dump())
-            st = StoryTeller(
-                get_rotator(), OUTPUT_DIR,
-                pexels_key=os.getenv("PEXELS_API_KEY", ""),
-                pixabay_key=os.getenv("PIXABAY_API_KEY", ""),
-            )
+            st = StoryTeller(get_rotator(), OUTPUT_DIR,
+                             pexels_key=os.getenv("PEXELS_API_KEY", ""),
+                             pixabay_key=os.getenv("PIXABAY_API_KEY", ""))
             result = await asyncio.to_thread(st.process, opts, lambda m: _log_to_job(jid, m))
             JOBS[jid]["result"] = {
-                "output_path": result.output_path,
-                "output_url": _to_url(result.output_path),
+                "output_path": result.output_path, "output_url": _to_url(result.output_path),
                 "thumbnail_url": _to_url(result.thumbnail_path),
-                "script": result.script,
-                "scenes": result.scenes,
-                "duration": result.duration,
+                "script": result.script, "scenes": result.scenes, "duration": result.duration,
             }
             JOBS[jid]["status"] = "done"
         except Exception as e:
@@ -336,13 +331,14 @@ async def story_start(body: StoryTellerBody):
     return {"job_id": jid}
 
 
-# --------------------------------------------------------------- Job
+# ── Job ───────────────────────────────────────────────────────────────────────
 @app.get("/api/job/{jid}")
 def job_status(jid: str):
     if jid not in JOBS:
         raise HTTPException(404, "Job tidak ditemukan.")
     job = JOBS[jid]
-    return {"id": job["id"], "status": job["status"], "progress": job["progress"][-30:], "result": job["result"], "error": job["error"]}
+    return {"id": job["id"], "status": job["status"],
+            "progress": job["progress"][-30:], "result": job["result"], "error": job["error"]}
 
 @app.websocket("/ws/job/{jid}")
 async def job_ws(ws: WebSocket, jid: str):
@@ -356,7 +352,8 @@ async def job_ws(ws: WebSocket, jid: str):
             job = JOBS[jid]
             new_logs = job["progress"][last_idx:]
             last_idx = len(job["progress"])
-            await ws.send_json({"status": job["status"], "logs": new_logs, "result": job["result"], "error": job["error"]})
+            await ws.send_json({"status": job["status"], "logs": new_logs,
+                                "result": job["result"], "error": job["error"]})
             if job["status"] in ("done", "error"):
                 break
             await asyncio.sleep(0.8)
@@ -364,12 +361,14 @@ async def job_ws(ws: WebSocket, jid: str):
         return
 
 
-# --------------------------------------------------------------- Outputs
+# ── Outputs ───────────────────────────────────────────────────────────────────
 @app.get("/api/outputs")
 def list_outputs():
     items = []
     for p in sorted(OUTPUT_DIR.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
-        items.append({"name": p.name, "url": _to_url(str(p)), "size_mb": round(p.stat().st_size / (1024**2), 2), "modified": p.stat().st_mtime})
+        items.append({"name": p.name, "url": _to_url(str(p)),
+                      "size_mb": round(p.stat().st_size / (1024**2), 2),
+                      "modified": p.stat().st_mtime})
     return {"items": items}
 
 @app.get("/files/{name}")
