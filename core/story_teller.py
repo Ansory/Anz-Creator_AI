@@ -1,21 +1,11 @@
 """
 Text to Story Telling — Ubah teks/topik jadi video storytelling cinematic.
-
-Alur:
-  1. Gemini generate naskah lengkap (dipecah per scene)
-  2. Per scene, Gemini generate keyword footage
-  3. Pexels/Pixabay search footage video bergerak
-  4. Download & potong footage sesuai durasi scene
-  5. Ken Burns / zoom / pan biar tidak statis
-  6. gTTS generate narasi audio
-  7. FFmpeg concat semua scene + audio narasi + subtitle + BGM
 """
 from __future__ import annotations
 
 import os
 import re
 import shutil
-import tempfile
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,9 +21,9 @@ from .gemini_client import GeminiClient
 GENRES = ["Romance", "Thriller", "Motivasi", "Horor", "Drama", "Edukasi", "Komedi"]
 STYLES = ["Formal", "Santai", "Dramatis", "Puitis"]
 LENGTH_PRESETS = {
-    "short": (60, 6),      # ~1 menit, ~6 scene
-    "medium": (180, 15),   # ~3 menit, ~15 scene
-    "long": (300, 25),     # ~5 menit, ~25 scene
+    "short": (60, 6),
+    "medium": (180, 15),
+    "long": (300, 25),
 }
 
 
@@ -42,22 +32,22 @@ class StoryTellerOptions:
     title: str
     genre: str = "Drama"
     style: str = "Dramatis"
-    length: str = "medium"       # short|medium|long
+    length: str = "medium"
     language: str = "id"
-    tts_voice: str = "female"    # gTTS cuma support 1 voice per lang, tapi bisa variasi speed
-    tts_speed: str = "normal"    # slow|normal|fast
-    bgm_mood: str = "epic"       # epic|sad|calm|upbeat|none
+    tts_voice: str = "female"
+    tts_speed: str = "normal"
+    bgm_mood: str = "epic"
     aspect: str = "9:16"
     quality: str = "1080p"
-    use_footage: bool = True     # kalau false, pakai BG solid/gradient
+    use_footage: bool = True
 
 
 @dataclass
 class Scene:
     index: int
-    text: str                    # narasi
-    keyword: str                 # search term footage
-    duration: float = 0.0        # akan diisi setelah TTS
+    text: str
+    keyword: str
+    duration: float = 0.0
     footage_path: Optional[str] = None
     audio_path: Optional[str] = None
     rendered_path: Optional[str] = None
@@ -81,10 +71,10 @@ class StoryTeller:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.work_dir = self.output_dir / ".work"
         self.work_dir.mkdir(exist_ok=True)
-        self.pexels_key = pexels_key or os.getenv("PEXELS_API_KEY", "PfwZYmwU4CJhd5W84N14mIkfo3ZqN5Q0r68qUFfCVsoyxE57xaew4h1Z")
-        self.pixabay_key = pixabay_key or os.getenv("PIXABAY_API_KEY", "43243893-078bf0defe316eaf53d71f550")
+        # FIX: tidak ada hardcoded key — hanya dari parameter atau env
+        self.pexels_key = pexels_key or os.getenv("PEXELS_API_KEY", "")
+        self.pixabay_key = pixabay_key or os.getenv("PIXABAY_API_KEY", "")
 
-    # ------------------------------------------------------- Script gen
     def _generate_script(self, opts: StoryTellerOptions) -> List[Scene]:
         target_dur, n_scenes = LENGTH_PRESETS.get(opts.length, LENGTH_PRESETS["medium"])
         lang_label = "Bahasa Indonesia" if opts.language == "id" else "English"
@@ -98,8 +88,7 @@ Target durasi narasi: ~{target_dur} detik ({n_scenes} scene).
 Pecah cerita menjadi tepat {n_scenes} scene. Setiap scene:
 - text: narasi 1-3 kalimat, mengalir, cocok dibaca TTS
 - keyword: 2-4 kata bahasa Inggris untuk cari footage video di Pexels/Pixabay
-  (pilih keyword yang VISUAL konkret, contoh: "rainy city street", "sunrise mountain peak",
-   "woman crying close up", "busy office workers" — JANGAN abstrak)
+  (pilih keyword yang VISUAL konkret, contoh: "rainy city street", "sunrise mountain peak")
 
 Output JSON strict:
 {{
@@ -118,7 +107,6 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
             for i, s in enumerate(scenes_raw) if s.get("text")
         ]
 
-    # ------------------------------------------------------- Footage search
     def _search_pexels(self, query: str) -> Optional[str]:
         if not self.pexels_key:
             return None
@@ -130,13 +118,12 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
             r.raise_for_status()
             data = r.json()
             for video in data.get("videos", []):
-                # ambil file hd
                 files = sorted(video.get("video_files", []),
                                key=lambda f: (f.get("quality") == "hd", f.get("width", 0)),
                                reverse=True)
                 if files:
                     return files[0].get("link")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"[pexels] {e}")
         return None
 
@@ -154,12 +141,11 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
                 for quality in ("large", "medium", "small"):
                     if quality in videos and videos[quality].get("url"):
                         return videos[quality]["url"]
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"[pixabay] {e}")
         return None
 
     def _get_footage(self, keyword: str, dst: Path) -> Optional[Path]:
-        """Coba Pexels dulu, fallback Pixabay. Return path lokal atau None."""
         for fn in (self._search_pexels, self._search_pixabay):
             url = fn(keyword)
             if not url:
@@ -172,12 +158,11 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
                             f.write(chunk)
                 if dst.stat().st_size > 1024:
                     return dst
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 print(f"[download footage] {e}")
                 continue
         return None
 
-    # ------------------------------------------------------- TTS
     def _generate_tts(self, text: str, dst: Path, language: str, speed: str) -> Path:
         try:
             from gtts import gTTS
@@ -189,26 +174,18 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
         tts = gTTS(text=text, lang=lang, slow=slow)
         tts.save(str(dst))
 
-        # speed up kalau "fast"
         if speed == "fast":
             fast_path = dst.with_name(dst.stem + "_fast.mp3")
             ff.run_ffmpeg(["-i", str(dst), "-filter:a", "atempo=1.25", str(fast_path)])
             fast_path.replace(dst)
         return dst
 
-    # ------------------------------------------------------- Scene render
     def _render_scene(self, scene: Scene, size: tuple[int, int]) -> Path:
-        """
-        Render satu scene ke video dengan durasi audio narasi.
-        Kalau ada footage → pakai footage (loop/trim sesuai durasi narasi).
-        Kalau tidak → gradient background.
-        """
         W, H = size
         out = self.work_dir / f"scene_{scene.index:03d}_{uuid.uuid4().hex[:6]}.mp4"
         dur = scene.duration
 
         if scene.footage_path and Path(scene.footage_path).exists():
-            # Scale footage ke target size + loop kalau kurang + Ken Burns subtle
             vf = (
                 f"scale={W}:{H}:force_original_aspect_ratio=increase,"
                 f"crop={W}:{H},"
@@ -226,7 +203,6 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
                 str(out),
             ])
         else:
-            # Gradient background
             ff.run_ffmpeg([
                 "-f", "lavfi",
                 "-i", f"color=c=0x06080f:s={W}x{H}:d={dur:.2f},"
@@ -242,7 +218,6 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
 
         return out
 
-    # ------------------------------------------------------- SRT
     def _write_srt(self, scenes: List[Scene], path: Path) -> None:
         def ts(t: float) -> str:
             h = int(t // 3600)
@@ -258,13 +233,11 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
                 f.write(f"{i}\n{ts(start)} --> {ts(end)}\n{sc.text}\n\n")
                 t = end
 
-    # ------------------------------------------------------- Main
     def process(self, opts: StoryTellerOptions, progress_cb=None) -> StoryResult:
         def log(msg):
             if progress_cb:
                 progress_cb(msg)
 
-        # 1. Script
         log("AI menulis naskah cerita...")
         scenes = self._generate_script(opts)
         if not scenes:
@@ -273,7 +246,6 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
 
         job_id = uuid.uuid4().hex[:8]
 
-        # 2. TTS per scene
         for i, sc in enumerate(scenes):
             log(f"TTS scene {i+1}/{len(scenes)}...")
             audio_path = self.work_dir / f"aud_{job_id}_{i:03d}.mp3"
@@ -281,7 +253,6 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
             sc.audio_path = str(audio_path)
             sc.duration = max(2.0, ff.get_duration(audio_path) + 0.3)
 
-        # 3. Footage per scene
         if opts.use_footage:
             for i, sc in enumerate(scenes):
                 log(f"Cari footage scene {i+1}/{len(scenes)}: {sc.keyword}")
@@ -290,7 +261,6 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
                 if result:
                     sc.footage_path = str(result)
 
-        # 4. Render per scene
         size = self._resolve_size(opts.aspect, opts.quality)
         scene_paths = []
         for i, sc in enumerate(scenes):
@@ -299,49 +269,42 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
             sc.rendered_path = str(p)
             scene_paths.append(p)
 
-        # 5. Concat
         log("Menggabungkan semua scene...")
         concat_path = self.work_dir / f"concat_{job_id}.mp4"
         ff.concat_videos(scene_paths, concat_path)
 
-        # 6. Subtitle
         log("Menambah subtitle...")
         srt_path = self.work_dir / f"sub_{job_id}.srt"
         self._write_srt(scenes, srt_path)
         with_sub = self.work_dir / f"sub_{job_id}.mp4"
         try:
             ff.burn_subtitles(concat_path, with_sub, srt_path, encoding="balanced")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log(f"Subtitle gagal, lanjut tanpa: {e}")
             with_sub = concat_path
 
-        # 7. BGM (opsional — placeholder, butuh library BGM lokal)
         final_path = self.output_dir / f"story_{job_id}.mp4"
         bgm_path = self._find_bgm(opts.bgm_mood)
         if bgm_path:
             log("Mix BGM...")
             try:
-                # BGM sudah mixed lewat extract narration track dari video
                 tmp = self.work_dir / f"final_{job_id}.mp4"
-                # extract audio narration (current audio track)
                 narr_audio = self.work_dir / f"narr_{job_id}.aac"
                 ff.run_ffmpeg(["-i", str(with_sub), "-vn", "-c:a", "copy", str(narr_audio)])
                 ff.mix_audio(with_sub, narr_audio, tmp, bgm=bgm_path)
                 tmp.replace(final_path)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log(f"BGM mix gagal, skip: {e}")
                 shutil.copy(with_sub, final_path)
         else:
             shutil.copy(with_sub, final_path)
 
-        # 8. Thumbnail
         thumb_path = self.output_dir / f"story_{job_id}_thumb.jpg"
         try:
             ff.extract_frame(final_path, thumb_path, at=min(2.0, ff.get_duration(final_path) / 2))
         except Exception:
             thumb_path = Path()
 
-        # cleanup
         for p in self.work_dir.glob(f"*_{job_id}*"):
             p.unlink(missing_ok=True)
         for p in scene_paths:
@@ -368,18 +331,14 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
         return int(h * 9 / 16), h
 
     def _find_bgm(self, mood: str) -> Optional[Path]:
-        """Cari file BGM di folder assets/bgm/<mood>.mp3 kalau ada."""
         if mood == "none":
             return None
-        # cek folder lokal
         for base in [Path("assets/bgm"), Path(__file__).parent.parent / "assets" / "bgm"]:
             p = base / f"{mood}.mp3"
             if p.exists():
                 return p
         return None
 
-    # ------------------------------------------------------- Preview only
     def preview_script(self, opts: StoryTellerOptions) -> List[Dict]:
-        """Generate script tanpa render video. Untuk tombol Preview."""
         scenes = self._generate_script(opts)
         return [{"text": sc.text, "keyword": sc.keyword} for sc in scenes]
