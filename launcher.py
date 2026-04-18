@@ -1,6 +1,5 @@
 """
 Anz-Creator Launcher.
-Dijalankan oleh user setelah di-compile ke Anz-Creator.exe via PyInstaller.
 """
 from __future__ import annotations
 
@@ -52,7 +51,68 @@ def show_error_dialog(title: str, message: str) -> None:
             pass
 
 
-def wait_for_server(port: int, timeout: float = 20.0) -> bool:
+def ensure_env_file(root: Path) -> None:
+    """
+    Auto-setup .env dari .env.example kalau .env belum ada.
+    Dijalankan sekali saat pertama kali exe dibuka.
+    """
+    env_path = root / ".env"
+    example_path = root / ".env.example"
+
+    if env_path.exists():
+        log.info(f".env sudah ada: {env_path}")
+        return
+
+    # Coba copy dari .env.example
+    if example_path.exists():
+        import shutil
+        shutil.copy(example_path, env_path)
+        log.info(f".env dibuat dari .env.example: {env_path}")
+        return
+
+    # Fallback: buat .env minimal dari bundle
+    bundle = bundle_root()
+    bundle_example = bundle / ".env.example"
+    if bundle_example.exists():
+        import shutil
+        shutil.copy(bundle_example, env_path)
+        log.info(f".env dibuat dari bundle .env.example: {env_path}")
+        return
+
+    # Last resort: tulis default minimal
+    log.warning(".env.example tidak ditemukan, membuat .env default...")
+    env_path.write_text(
+        "# === ANZ-CREATOR Environment Variables ===\n\n"
+        "# Gemini API Keys (isi di sini atau via menu API Manager di aplikasi)\n"
+        "GEMINI_API_KEYS=\n\n"
+        "# Pexels API Key (https://www.pexels.com/api/)\n"
+        "PEXELS_API_KEY=\n\n"
+        "# Pixabay API Key (https://pixabay.com/api/docs/)\n"
+        "PIXABAY_API_KEY=\n\n"
+        "# Server port\n"
+        "SERVER_PORT=2712\n\n"
+        "# Output directory\n"
+        "OUTPUT_DIR=./outputs\n",
+        encoding="utf-8",
+    )
+    log.info(f".env default dibuat: {env_path}")
+
+
+def read_port_from_env(root: Path) -> int:
+    """Baca SERVER_PORT dari .env, fallback ke 2712."""
+    env_path = root / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("SERVER_PORT="):
+                try:
+                    return int(line.split("=", 1)[1].strip())
+                except ValueError:
+                    pass
+    return int(os.getenv("SERVER_PORT", "2712"))
+
+
+def wait_for_server(port: int, timeout: float = 25.0) -> bool:
     import urllib.request
     import urllib.error
 
@@ -80,11 +140,10 @@ def open_chrome(url: str) -> None:
             try:
                 webbrowser.register("chrome", None, webbrowser.BackgroundBrowser(path))
                 webbrowser.get("chrome").open(url, new=2)
-                log.info(f"Opened Chrome at {path}")
+                log.info(f"Opened Chrome: {path}")
                 return
             except Exception as e:
-                log.warning(f"Failed to open Chrome at {path}: {e}")
-                continue
+                log.warning(f"Failed Chrome at {path}: {e}")
     log.info("Chrome not found, using default browser")
     webbrowser.open(url, new=2)
 
@@ -98,7 +157,7 @@ def run_server(port: int) -> None:
         os.chdir(str(app_root()))
         os.environ["SERVER_PORT"] = str(port)
 
-        log.info(f"Starting server on port {port} (bundle={bundle}, cwd={os.getcwd()})")
+        log.info(f"Starting server port={port} bundle={bundle} cwd={os.getcwd()}")
 
         import server as server_module  # noqa
         import uvicorn
@@ -126,30 +185,23 @@ def main() -> int:
     try:
         root = app_root()
 
-        # FIX: default port 2712, baca dari .env dulu kalau ada
-        env_file = root / ".env"
-        port = 2712  # default
-        if env_file.exists():
-            for line in env_file.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("SERVER_PORT="):
-                    try:
-                        port = int(line.split("=", 1)[1].strip())
-                    except ValueError:
-                        pass
-                    break
-        # env var override
-        port = int(os.getenv("SERVER_PORT", str(port)))
-
         log.info("=" * 60)
         log.info("Anz-Creator Launcher starting")
-        log.info(f"App root: {root}")
-        log.info(f"Bundle root: {bundle_root()}")
-        log.info(f"Python: {sys.executable}")
-        log.info(f"Frozen: {getattr(sys, 'frozen', False)}")
-        log.info(f"Port: {port}")
+        log.info(f"App root : {root}")
+        log.info(f"Bundle   : {bundle_root()}")
+        log.info(f"Python   : {sys.executable}")
+        log.info(f"Frozen   : {getattr(sys, 'frozen', False)}")
         log.info("=" * 60)
 
+        # ── AUTO-SETUP .env ──────────────────────────────────────
+        # Kalau .env belum ada, buat otomatis dari .env.example
+        ensure_env_file(root)
+
+        # ── BACA PORT ────────────────────────────────────────────
+        port = read_port_from_env(root)
+        log.info(f"Port: {port}")
+
+        # ── START SERVER ─────────────────────────────────────────
         server_thread = threading.Thread(
             target=run_server,
             args=(port,),
@@ -158,14 +210,15 @@ def main() -> int:
         )
         server_thread.start()
 
-        if wait_for_server(port, timeout=20.0):
-            log.info(f"✓ Server ready at http://localhost:{port}")
+        # ── TUNGGU SIAP ──────────────────────────────────────────
+        if wait_for_server(port, timeout=25.0):
+            log.info(f"✓ Server ready → http://localhost:{port}")
             open_chrome(f"http://localhost:{port}")
         else:
-            log.error("Server timeout — tidak ready dalam 20 detik")
+            log.error("Server timeout")
             show_error_dialog(
                 "Anz-Creator: Startup Timeout",
-                f"Server tidak bisa start di port {port} dalam 20 detik.\n\n"
+                f"Server tidak bisa start di port {port} dalam 25 detik.\n\n"
                 f"Kemungkinan penyebab:\n"
                 f"  • Port {port} sudah dipakai aplikasi lain\n"
                 f"  • Firewall blocking localhost\n"
@@ -178,16 +231,15 @@ def main() -> int:
             while server_thread.is_alive():
                 time.sleep(1)
         except KeyboardInterrupt:
-            log.info("Keyboard interrupt, shutting down")
+            log.info("Keyboard interrupt")
 
         return 0
 
     except Exception as e:
-        log.error(f"Fatal error in main(): {e}\n{traceback.format_exc()}")
+        log.error(f"Fatal: {e}\n{traceback.format_exc()}")
         show_error_dialog(
             "Anz-Creator: Fatal Error",
-            f"Terjadi error fatal saat startup:\n\n{e}\n\n"
-            f"Cek launcher.log di folder exe untuk detail.",
+            f"Error fatal saat startup:\n\n{e}\n\nCek launcher.log untuk detail.",
         )
         return 1
 
