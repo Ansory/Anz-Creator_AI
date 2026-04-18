@@ -6,12 +6,29 @@ Thread-safe, persistent ke keys.json.
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 from dataclasses import dataclass, asdict, field
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+
+
+def _resolve_storage_path(given: str | Path) -> Path:
+    """
+    Selalu simpan keys.json di sebelah .exe (app_root),
+    bukan di current working directory.
+    """
+    p = Path(given)
+    # Kalau path sudah absolut, pakai apa adanya
+    if p.is_absolute():
+        return p
+    # Kalau frozen (PyInstaller .exe), simpan di sebelah .exe
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent / p.name
+    # Dev mode: simpan di sebelah script yang memanggil
+    return Path(__file__).resolve().parent.parent / p.name
 
 
 class KeyStatus(str, Enum):
@@ -24,11 +41,11 @@ class KeyStatus(str, Enum):
 class APIKey:
     key: str
     status: str = KeyStatus.ACTIVE.value
-    last_used: float = 0.0          # unix timestamp
+    last_used: float = 0.0
     error_count: int = 0
-    quota_reset_at: float = 0.0     # unix timestamp when we'll retry a quota-exceeded key
+    quota_reset_at: float = 0.0
     usage_count: int = 0
-    label: str = ""                 # optional human label
+    label: str = ""
 
     def masked(self) -> str:
         if len(self.key) <= 8:
@@ -36,7 +53,6 @@ class APIKey:
         return self.key[:4] + "..." + self.key[-4:]
 
     def to_public_dict(self) -> Dict[str, Any]:
-        """Dict aman untuk dikirim ke frontend (key di-mask)."""
         return {
             "masked": self.masked(),
             "status": self.status,
@@ -53,21 +69,11 @@ class AllKeysExhaustedError(Exception):
 
 
 class APIKeyRotator:
-    """
-    Thread-safe rotator untuk banyak Gemini API key.
-
-    Mode:
-      - 'round_robin' : bergilir urut, skip yang non-active.
-      - 'smart'       : pilih key dengan usage_count terkecil yang active.
-
-    Quota-exceeded keys akan dicoba lagi setelah QUOTA_COOLDOWN detik.
-    """
-
-    QUOTA_COOLDOWN = 60 * 60  # 1 jam sebelum retry key quota exceeded
+    QUOTA_COOLDOWN = 60 * 60  # 1 jam
     VALID_MODES = ("round_robin", "smart")
 
     def __init__(self, storage_path: str | Path = "keys.json"):
-        self.storage_path = Path(storage_path)
+        self.storage_path = _resolve_storage_path(storage_path)
         self._keys: List[APIKey] = []
         self._current = 0
         self._mode = "round_robin"
@@ -76,7 +82,6 @@ class APIKeyRotator:
 
     # ---------------------------------------------------------------- CRUD
     def add_keys(self, keys_list: List[str], label_prefix: str = "") -> int:
-        """Tambah banyak key sekaligus (duplikat di-skip). Return jumlah yang benar-benar ditambah."""
         added = 0
         with self._lock:
             existing = {k.key for k in self._keys}
@@ -126,7 +131,6 @@ class APIKeyRotator:
         return self._mode
 
     def _refresh_quota_status(self) -> None:
-        """Kembalikan key yang sudah melewati cooldown ke ACTIVE."""
         now = time.time()
         for k in self._keys:
             if k.status == KeyStatus.QUOTA_EXCEEDED.value and k.quota_reset_at and now >= k.quota_reset_at:
@@ -134,7 +138,6 @@ class APIKeyRotator:
                 k.quota_reset_at = 0.0
 
     def get_next_key(self) -> str:
-        """Ambil key berikutnya sesuai mode. Raise AllKeysExhaustedError jika habis."""
         with self._lock:
             if not self._keys:
                 raise AllKeysExhaustedError("Tidak ada API key tersedia. Tambahkan via API Key Manager.")
@@ -148,11 +151,10 @@ class APIKeyRotator:
                 )
 
             if self._mode == "round_robin":
-                # cari index active berikutnya mulai dari self._current
                 ordered = sorted(active, key=lambda i: (i - self._current) % len(self._keys))
                 idx = ordered[0]
                 self._current = (idx + 1) % len(self._keys)
-            else:  # smart
+            else:
                 idx = min(active, key=lambda i: self._keys[i].usage_count)
 
             k = self._keys[idx]
@@ -160,7 +162,6 @@ class APIKeyRotator:
             k.usage_count += 1
             chosen_key = k.key
 
-        # save di luar lock (file IO)
         self.save_to_file()
         return chosen_key
 
@@ -184,7 +185,6 @@ class APIKeyRotator:
         self.save_to_file()
 
     def mark_success(self, key: str) -> None:
-        """Reset error count setelah sukses."""
         with self._lock:
             for k in self._keys:
                 if k.key == key:
@@ -192,7 +192,6 @@ class APIKeyRotator:
                         k.status = KeyStatus.ACTIVE.value
                     k.error_count = 0
                     break
-        # no save — success path dipanggil sering
 
     # ---------------------------------------------------------------- Stats
     def get_stats(self) -> Dict[str, int]:
@@ -227,7 +226,7 @@ class APIKeyRotator:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             tmp.replace(self.storage_path)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"[APIKeyRotator] save error: {e}")
 
     def load_from_file(self) -> None:
@@ -241,13 +240,13 @@ class APIKeyRotator:
                 self._mode = "round_robin"
             self._current = int(data.get("current", 0))
             self._keys = [APIKey(**k) for k in data.get("keys", [])]
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"[APIKeyRotator] load error: {e}")
             self._keys = []
             self._current = 0
 
 
-# Singleton untuk server.py
+# Singleton
 rotator_singleton: Optional[APIKeyRotator] = None
 
 
