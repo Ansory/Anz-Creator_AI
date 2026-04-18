@@ -70,6 +70,56 @@ function toast(msg, type = 'ok') {
   setTimeout(() => el.remove(), 4000);
 }
 
+/* -------------------- Error parser -------------------- */
+/**
+ * Extract user-friendly error message from a FastAPI HTTPException response.
+ * FastAPI returns: { "detail": "string" }  OR  { "detail": { code, message, hint, ... } }
+ */
+async function parseApiError(response) {
+  let payload;
+  try { payload = await response.json(); } catch { payload = {}; }
+  const d = payload.detail;
+
+  if (!d) return { message: `HTTP ${response.status}`, hint: null, code: null };
+  if (typeof d === 'string') return { message: d, hint: null, code: null };
+
+  // Structured error object
+  return {
+    message: d.message || 'Error tidak diketahui',
+    hint: d.hint || null,
+    code: d.code || null,
+    traceback: d.traceback || null,
+  };
+}
+
+/** Show an error in an empty-state container with hint + optional details toggle. */
+function renderError(container, err) {
+  let html = `
+    <div class="empty-state" style="color:var(--pink); text-align:left; padding:16px">
+      <div style="font-weight:600; margin-bottom:6px">❌ ${escapeHtml(err.message)}</div>`;
+  if (err.hint) {
+    html += `<div style="font-size:12px; opacity:0.75; margin-bottom:6px">💡 ${escapeHtml(err.hint)}</div>`;
+  }
+  if (err.code) {
+    html += `<div style="font-size:11px; opacity:0.5; font-family:monospace">code: ${escapeHtml(err.code)}</div>`;
+  }
+  if (err.traceback && err.traceback.length) {
+    html += `
+      <details style="margin-top:8px; font-size:11px; opacity:0.6">
+        <summary style="cursor:pointer">Technical details</summary>
+        <pre style="white-space:pre-wrap; margin-top:6px; font-size:10px">${escapeHtml(err.traceback.join('\n'))}</pre>
+      </details>`;
+  }
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
 /* -------------------- Nav -------------------- */
 const NAV_TITLES = {
   'short-maker': 'SHORT MAKER',
@@ -291,8 +341,10 @@ document.getElementById('sm-find-viral').addEventListener('click', async () => {
       language: 'id',
     });
     if (!r.ok) {
-      const err = await r.json();
-      throw new Error(err.detail || 'Error');
+      const err = await parseApiError(r);
+      renderError(list, err);
+      toast(err.message, 'err');
+      return;
     }
     const data = await r.json();
     const moments = data.data?.moments || [];
@@ -320,7 +372,7 @@ document.getElementById('sm-find-viral').addEventListener('click', async () => {
       });
     }
   } catch (e) {
-    list.innerHTML = `<div class="empty-state" style="color:var(--pink)">❌ ${e.message}</div>`;
+    renderError(list, { message: e.message || 'Network error', hint: 'Cek koneksi dan coba lagi.' });
     toast(e.message, 'err');
   } finally {
     btn.disabled = false;
@@ -436,8 +488,10 @@ document.getElementById('st-preview').addEventListener('click', async () => {
   try {
     const r = await API.stPreview(opts);
     if (!r.ok) {
-      const err = await r.json();
-      throw new Error(err.detail || 'Error');
+      const err = await parseApiError(r);
+      renderError(document.getElementById('st-script-list'), err);
+      toast(err.message, 'err');
+      return;
     }
     const data = await r.json();
     const scenes = data.scenes || [];
@@ -455,7 +509,10 @@ document.getElementById('st-preview').addEventListener('click', async () => {
     }
     toast(`${scenes.length} scene dibuat`);
   } catch (e) {
-    document.getElementById('st-script-list').innerHTML = `<div class="empty-state" style="color:var(--pink)">❌ ${e.message}</div>`;
+    renderError(
+      document.getElementById('st-script-list'),
+      { message: e.message || 'Network error', hint: 'Cek koneksi dan coba lagi.' }
+    );
     toast(e.message, 'err');
   } finally {
     btn.disabled = false;
