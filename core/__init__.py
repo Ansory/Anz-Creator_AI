@@ -1,2 +1,9 @@
 """Anz-Creator core package."""
-__version__ = "1.0.0"
+try:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from version import VERSION
+    __version__ = VERSION
+except Exception:
+    __version__ = "dev"
