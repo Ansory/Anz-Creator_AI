@@ -17,9 +17,7 @@ const API = {
     const fd = new FormData(); fd.append('file', file);
     return fetch('/api/keys/import', { method: 'POST', body: fd }).then(r => r.json());
   },
-  removeKey: (masked) => fetch(`/api/keys/${encodeURIComponent(masked)}`, {
-    method: 'DELETE',
-  }).then(r => r.json()),
+  removeKey: (masked) => fetch(`/api/keys/${encodeURIComponent(masked)}`, { method: 'DELETE' }).then(r => r.json()),
   clearKeys: () => fetch('/api/keys/clear', { method: 'POST' }).then(r => r.json()),
   setMode: (mode) => fetch('/api/keys/mode', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -57,6 +55,10 @@ const API = {
 
   // Outputs
   listOutputs: () => fetch('/api/outputs').then(r => r.json()),
+
+  // System
+  shutdown: () => fetch('/api/system/shutdown', { method: 'POST' }).then(r => r.json()),
+  restart: () => fetch('/api/system/restart', { method: 'POST' }).then(r => r.json()),
 };
 
 /* -------------------- Toast -------------------- */
@@ -71,19 +73,12 @@ function toast(msg, type = 'ok') {
 }
 
 /* -------------------- Error parser -------------------- */
-/**
- * Extract user-friendly error message from a FastAPI HTTPException response.
- * FastAPI returns: { "detail": "string" }  OR  { "detail": { code, message, hint, ... } }
- */
 async function parseApiError(response) {
   let payload;
   try { payload = await response.json(); } catch { payload = {}; }
   const d = payload.detail;
-
   if (!d) return { message: `HTTP ${response.status}`, hint: null, code: null };
   if (typeof d === 'string') return { message: d, hint: null, code: null };
-
-  // Structured error object
   return {
     message: d.message || 'Error tidak diketahui',
     hint: d.hint || null,
@@ -92,32 +87,23 @@ async function parseApiError(response) {
   };
 }
 
-/** Show an error in an empty-state container with hint + optional details toggle. */
 function renderError(container, err) {
-  let html = `
-    <div class="empty-state" style="color:var(--pink); text-align:left; padding:16px">
-      <div style="font-weight:600; margin-bottom:6px">❌ ${escapeHtml(err.message)}</div>`;
-  if (err.hint) {
-    html += `<div style="font-size:12px; opacity:0.75; margin-bottom:6px">💡 ${escapeHtml(err.hint)}</div>`;
-  }
-  if (err.code) {
-    html += `<div style="font-size:11px; opacity:0.5; font-family:monospace">code: ${escapeHtml(err.code)}</div>`;
-  }
+  let html = `<div class="empty-state" style="color:var(--pink); text-align:left; padding:16px">
+    <div style="font-weight:600; margin-bottom:6px">❌ ${escapeHtml(err.message)}</div>`;
+  if (err.hint) html += `<div style="font-size:12px; opacity:0.75; margin-bottom:6px">💡 ${escapeHtml(err.hint)}</div>`;
+  if (err.code) html += `<div style="font-size:11px; opacity:0.5; font-family:monospace">code: ${escapeHtml(err.code)}</div>`;
   if (err.traceback && err.traceback.length) {
-    html += `
-      <details style="margin-top:8px; font-size:11px; opacity:0.6">
-        <summary style="cursor:pointer">Technical details</summary>
-        <pre style="white-space:pre-wrap; margin-top:6px; font-size:10px">${escapeHtml(err.traceback.join('\n'))}</pre>
-      </details>`;
+    html += `<details style="margin-top:8px; font-size:11px; opacity:0.6">
+      <summary style="cursor:pointer">Technical details</summary>
+      <pre style="white-space:pre-wrap; margin-top:6px; font-size:10px">${escapeHtml(err.traceback.join('\n'))}</pre>
+    </details>`;
   }
   html += `</div>`;
   container.innerHTML = html;
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 /* -------------------- Nav -------------------- */
@@ -134,12 +120,8 @@ function switchView(viewName) {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === viewName));
   document.querySelectorAll('.panel-content').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== viewName));
   document.getElementById('topbar-title').textContent = NAV_TITLES[viewName] || viewName.toUpperCase();
-
-  // Hide right panel for views without panel content
   const hasPanel = document.querySelector(`.panel-content[data-panel="${viewName}"]`);
   document.getElementById('app').classList.toggle('no-right', !hasPanel);
-
-  // Load data for specific views
   if (viewName === 'api-manager') loadKeys();
   if (viewName === 'outputs') loadOutputs();
 }
@@ -148,7 +130,7 @@ document.querySelectorAll('.nav-item').forEach(n => {
   n.addEventListener('click', () => switchView(n.dataset.view));
 });
 
-/* -------------------- Segmented control helper -------------------- */
+/* -------------------- Segmented control -------------------- */
 function segValue(id) {
   const el = document.getElementById(id);
   const active = el?.querySelector('.seg__item.active');
@@ -161,7 +143,6 @@ document.querySelectorAll('.seg').forEach(seg => {
     if (!item) return;
     seg.querySelectorAll('.seg__item').forEach(i => i.classList.remove('active'));
     item.classList.add('active');
-    // Special: keys-mode
     if (seg.id === 'keys-mode') {
       API.setMode(item.dataset.mode).then(() => {
         toast(`Mode rotation: ${item.dataset.mode}`);
@@ -171,7 +152,7 @@ document.querySelectorAll('.seg').forEach(seg => {
   });
 });
 
-/* -------------------- Tab handler (Short Maker input source) -------------------- */
+/* -------------------- Tab handler -------------------- */
 document.querySelectorAll('.tabs').forEach(tabs => {
   tabs.addEventListener('click', (e) => {
     const tab = e.target.closest('.tabs__tab');
@@ -208,20 +189,14 @@ updateResources();
 async function loadKeys() {
   const data = await API.listKeys();
   const stats = data.stats;
-
-  // header stats
   document.getElementById('keys-count').textContent = stats.total;
   document.getElementById('keys-active').textContent = stats.active;
   document.getElementById('keys-quota').textContent = stats.quota_exceeded;
   document.getElementById('keys-invalid').textContent = stats.invalid;
-
-  // sidebar
   document.getElementById('api-active').textContent = stats.active;
   document.getElementById('api-total').textContent = stats.total;
   document.getElementById('api-mode').textContent = data.mode;
   document.getElementById('badge-keys').textContent = `${stats.active}/${stats.total} KEYS`;
-
-  // right panel
   const rpTotal = document.getElementById('rp-total');
   if (rpTotal) {
     rpTotal.textContent = stats.total;
@@ -229,19 +204,14 @@ async function loadKeys() {
     document.getElementById('rp-quota').textContent = stats.quota_exceeded;
     document.getElementById('rp-invalid').textContent = stats.invalid;
   }
-
-  // mode segmented
   document.querySelectorAll('#keys-mode .seg__item').forEach(i => {
     i.classList.toggle('active', i.dataset.mode === data.mode);
   });
-
-  // list
   const list = document.getElementById('keys-list');
   if (!data.keys || !data.keys.length) {
     list.innerHTML = '<div class="empty-state">Belum ada API key. Tambah di atas.</div>';
     return;
   }
-
   list.innerHTML = data.keys.map((k, i) => {
     const last = k.last_used ? new Date(k.last_used * 1000).toLocaleTimeString() : '—';
     return `<div class="key-row">
@@ -252,7 +222,6 @@ async function loadKeys() {
       <button class="btn btn--sm btn--danger" data-masked="${k.masked}">✕</button>
     </div>`;
   }).join('');
-
   list.querySelectorAll('[data-masked]').forEach(btn => {
     btn.addEventListener('click', async () => {
       await API.removeKey(btn.dataset.masked);
@@ -298,7 +267,6 @@ document.getElementById('sm-file').addEventListener('change', async (e) => {
     const r = await API.upload(f);
     uploadedFilePath = r.path;
     document.getElementById('sm-file-info').textContent = `✓ ${r.name} uploaded (${(r.size/1024/1024).toFixed(1)} MB)`;
-    // preview
     const preview = document.getElementById('sm-preview');
     const url = URL.createObjectURL(f);
     preview.innerHTML = `<video src="${url}" controls></video>`;
@@ -311,29 +279,24 @@ document.getElementById('sm-file').addEventListener('change', async (e) => {
 document.getElementById('sm-url').addEventListener('input', (e) => {
   const url = e.target.value.trim();
   if (!url) return;
-  // embed YouTube preview kalau valid
   const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([^?&]+)/);
   if (m) {
     const vid = m[1];
     document.getElementById('sm-preview').innerHTML =
-      `<iframe width="100%" height="100%" src="https://www.youtube.com/embed/${vid}"
-       frameborder="0" allowfullscreen></iframe>`;
+      `<iframe width="100%" height="100%" src="https://www.youtube.com/embed/${vid}" frameborder="0" allowfullscreen></iframe>`;
   }
 });
 
 /* -------------------- SHORT MAKER: Find Viral -------------------- */
 document.getElementById('sm-find-viral').addEventListener('click', async () => {
-  const url = document.getElementById('sm-url').value.trim();
   const sourceType = document.querySelector('.tabs__tab.active').dataset.tab;
-  const source = sourceType === 'url' ? url : uploadedFilePath;
+  const source = sourceType === 'url' ? document.getElementById('sm-url').value.trim() : uploadedFilePath;
   if (!source) return toast('Masukkan URL atau upload file dulu', 'err');
-
   const btn = document.getElementById('sm-find-viral');
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> Scanning...';
   const list = document.getElementById('sm-viral-list');
   list.innerHTML = '<div class="text-sm text-muted">AI sedang menganalisis video...</div>';
-
   try {
     const r = await API.smFindViral({
       source, source_type: sourceType,
@@ -400,14 +363,11 @@ function parseTime(str) {
 document.getElementById('sm-start').addEventListener('click', async () => {
   const sourceType = document.querySelector('.tabs__tab.active').dataset.tab;
   const source = sourceType === 'url' ?
-    document.getElementById('sm-url').value.trim() :
-    uploadedFilePath;
+    document.getElementById('sm-url').value.trim() : uploadedFilePath;
   if (!source) return toast('Masukkan URL atau upload file', 'err');
-
   const durPreset = document.getElementById('sm-duration').value;
   const body = {
-    source,
-    source_type: sourceType,
+    source, source_type: sourceType,
     transform_mode: document.getElementById('sm-mode').value,
     aspect: segValue('sm-aspect'),
     quality: segValue('sm-quality'),
@@ -421,19 +381,14 @@ document.getElementById('sm-start').addEventListener('click', async () => {
     bypass_copyright: document.getElementById('sm-bypass').checked,
     language: 'id',
   };
-
   const btn = document.getElementById('sm-start');
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> PROCESSING...';
-
   document.getElementById('sm-log').innerHTML = '';
   document.getElementById('sm-result').innerHTML = '';
-
   try {
     const r = await API.smStart(body);
-    await pollJob(r.job_id, 'sm-log', (result) => {
-      renderShortResult(result);
-    });
+    await pollJob(r.job_id, 'sm-log', (result) => renderShortResult(result));
   } catch (e) {
     toast(e.message, 'err');
   } finally {
@@ -443,7 +398,7 @@ document.getElementById('sm-start').addEventListener('click', async () => {
 });
 
 function renderShortResult(result) {
-  const html = `
+  document.getElementById('sm-result').innerHTML = `
     <div class="result-card">
       <h3>✓ CONVERSION COMPLETE</h3>
       <video src="${result.output_url}" controls style="width:100%;max-height:300px;border:1px solid var(--border-glow)"></video>
@@ -452,13 +407,11 @@ function renderShortResult(result) {
       <div class="meta-row"><span class="meta-row__label">DURASI</span><span class="meta-row__value">${result.duration.toFixed(1)} detik</span></div>
       <div class="meta-row"><span class="meta-row__label">SEGMEN</span><span class="meta-row__value">${fmtTime(result.start_seconds)} → ${fmtTime(result.end_seconds)}</span></div>
       <div class="meta-row"><span class="meta-row__label">DESKRIPSI</span><span class="meta-row__value">${result.description}</span></div>
-      <div class="meta-row"><span class="meta-row__label">TAGS</span><span class="meta-row__value">${(result.tags||[]).map(t => `<span class="tag-chip">#${t}</span>`).join('')}</span></div>
+      <div class="meta-row"><span class="meta-row__label">TAGS</span><span class="meta-row__value">${(result.tags||[]).map(t=>`<span class="tag-chip">#${t}</span>`).join('')}</span></div>
       ${result.pinned_comment ? `<div class="meta-row"><span class="meta-row__label">PIN COMMENT</span><span class="meta-row__value">${result.pinned_comment}</span></div>` : ''}
       <div class="divider"></div>
       <a class="btn" href="${result.output_url}" download>⤓ DOWNLOAD VIDEO</a>
-    </div>
-  `;
-  document.getElementById('sm-result').innerHTML = html;
+    </div>`;
 }
 
 /* -------------------- STORY TELLER -------------------- */
@@ -504,15 +457,11 @@ document.getElementById('st-preview').addEventListener('click', async () => {
           <div class="scene-card__num">SCENE ${String(i+1).padStart(2,'0')}</div>
           <div>${s.text}</div>
           <div class="scene-card__keyword">🎬 ${s.keyword}</div>
-        </div>
-      `).join('');
+        </div>`).join('');
     }
     toast(`${scenes.length} scene dibuat`);
   } catch (e) {
-    renderError(
-      document.getElementById('st-script-list'),
-      { message: e.message || 'Network error', hint: 'Cek koneksi dan coba lagi.' }
-    );
+    renderError(document.getElementById('st-script-list'), { message: e.message || 'Network error', hint: 'Cek koneksi dan coba lagi.' });
     toast(e.message, 'err');
   } finally {
     btn.disabled = false;
@@ -523,19 +472,14 @@ document.getElementById('st-preview').addEventListener('click', async () => {
 document.getElementById('st-start').addEventListener('click', async () => {
   const opts = collectStoryOpts();
   if (!opts.title) return toast('Isi judul/topik dulu', 'err');
-
   const btn = document.getElementById('st-start');
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> RENDERING...';
-
   document.getElementById('st-log').innerHTML = '';
   document.getElementById('st-result').innerHTML = '';
-
   try {
     const r = await API.stStart(opts);
-    await pollJob(r.job_id, 'st-log', (result) => {
-      renderStoryResult(result);
-    });
+    await pollJob(r.job_id, 'st-log', (result) => renderStoryResult(result));
   } catch (e) {
     toast(e.message, 'err');
   } finally {
@@ -545,7 +489,7 @@ document.getElementById('st-start').addEventListener('click', async () => {
 });
 
 function renderStoryResult(result) {
-  const html = `
+  document.getElementById('st-result').innerHTML = `
     <div class="result-card">
       <h3>✓ STORY GENERATED</h3>
       <video src="${result.output_url}" controls style="width:100%;max-height:300px;border:1px solid var(--border-glow)"></video>
@@ -554,16 +498,13 @@ function renderStoryResult(result) {
       <div class="meta-row"><span class="meta-row__label">SCENES</span><span class="meta-row__value">${result.scenes?.length || 0}</span></div>
       <div class="divider"></div>
       <a class="btn" href="${result.output_url}" download>⤓ DOWNLOAD VIDEO</a>
-    </div>
-  `;
-  document.getElementById('st-result').innerHTML = html;
+    </div>`;
 }
 
 /* -------------------- Job polling -------------------- */
 async function pollJob(jid, logElId, onDone) {
   const logEl = document.getElementById(logElId);
   const ws = tryOpenWebSocket(jid);
-
   return new Promise((resolve, reject) => {
     if (ws) {
       ws.onmessage = (e) => {
@@ -583,7 +524,6 @@ async function pollJob(jid, logElId, onDone) {
     } else {
       fallbackPoll();
     }
-
     function fallbackPoll() {
       let seen = 0;
       const interval = setInterval(async () => {
@@ -615,11 +555,8 @@ async function pollJob(jid, logElId, onDone) {
 function tryOpenWebSocket(jid) {
   try {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws/job/${jid}`);
-    return ws;
-  } catch (e) {
-    return null;
-  }
+    return new WebSocket(`${proto}://${location.host}/ws/job/${jid}`);
+  } catch (e) { return null; }
 }
 
 function appendLog(el, msg, cls = '') {
@@ -647,19 +584,39 @@ async function loadOutputs() {
       </div>
       <a class="btn btn--sm" href="${item.url}" target="_blank">▶ OPEN</a>
       <a class="btn btn--sm btn--ghost" href="${item.url}" download>⤓ DOWNLOAD</a>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 /* -------------------- INIT -------------------- */
 (async function init() {
   try {
+    // Ambil health dari server — sinkronkan port, versi di UI
+    const h = await API.health();
+
+    // Sinkron versi
+    if (h.version) {
+      document.getElementById('badge-version').textContent = 'v' + h.version;
+      const sv = document.getElementById('s-version');
+      if (sv) sv.textContent = h.version;
+    }
+
+    // Sinkron port — ambil dari URL browser (paling akurat) + server
+    const actualPort = location.port || (location.protocol === 'https:' ? '443' : '80');
+    const serverPort = h.port ? String(h.port) : actualPort;
+
+    // Update semua elemen yang menampilkan port
+    ['server-port', 's-port'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = serverPort;
+    });
+
+  } catch (e) {
+    console.error('Init health check failed:', e);
+  }
+
+  try {
     await loadKeys();
   } catch (e) {
     console.error(e);
   }
-  // Heartbeat
-  API.health().then(h => {
-    if (h.version) document.getElementById('badge-version').textContent = 'v' + h.version;
-  });
 })();
