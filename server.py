@@ -38,7 +38,7 @@ STATIC_DIR = ROOT / "static"
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(ROOT / "outputs"))).resolve()
 UPLOAD_DIR = OUTPUT_DIR / ".uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-PORT = int(os.getenv("SERVER_PORT", "8080"))
+PORT = int(os.getenv("SERVER_PORT", "2712"))
 
 # Load env API keys ke rotator (sekali saat startup)
 _rotator = get_rotator()
