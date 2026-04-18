@@ -81,8 +81,8 @@ class StoryTeller:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.work_dir = self.output_dir / ".work"
         self.work_dir.mkdir(exist_ok=True)
-        self.pexels_key = pexels_key or os.getenv("PEXELS_API_KEY", "")
-        self.pixabay_key = pixabay_key or os.getenv("PIXABAY_API_KEY", "")
+        self.pexels_key = pexels_key or os.getenv("PEXELS_API_KEY", "PfwZYmwU4CJhd5W84N14mIkfo3ZqN5Q0r68qUFfCVsoyxE57xaew4h1Z")
+        self.pixabay_key = pixabay_key or os.getenv("PIXABAY_API_KEY", "43243893-078bf0defe316eaf53d71f550")
 
     # ------------------------------------------------------- Script gen
     def _generate_script(self, opts: StoryTellerOptions) -> List[Scene]:
