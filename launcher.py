@@ -1,17 +1,6 @@
 """
 Anz-Creator Launcher.
 Dijalankan oleh user setelah di-compile ke Anz-Creator.exe via PyInstaller.
-
-Flow:
-  1. Start FastAPI server di thread terpisah (in-process, bukan subprocess)
-  2. Tunggu sampai server ready (polling http://localhost:PORT/api/health)
-  3. Buka browser Chrome ke localhost
-  4. Server berjalan sampai user tutup app (tray icon / kill process)
-
-PENTING:
-- Tidak boleh ada input() atau print() ke stdout karena --noconsole tidak punya stdin/stdout
-- Semua log → ke file launcher.log di folder exe
-- Error fatal → ditampilkan via tkinter messagebox
 """
 from __future__ import annotations
 
@@ -25,63 +14,44 @@ import webbrowser
 from pathlib import Path
 
 
-# ---------------------------------------------------------------------------
-# Path helpers
-# ---------------------------------------------------------------------------
 def app_root() -> Path:
-    """Lokasi folder exe (atau script saat dev mode)."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
     return Path(__file__).parent
 
 
 def bundle_root() -> Path:
-    """Lokasi file-file yang di-bundle PyInstaller (--add-data extract di _MEIPASS)."""
     if getattr(sys, "frozen", False):
         return Path(sys._MEIPASS)  # type: ignore[attr-defined]
     return Path(__file__).parent
 
 
-# ---------------------------------------------------------------------------
-# Logging setup (file-based, no stdout)
-# ---------------------------------------------------------------------------
 LOG_FILE = app_root() / "launcher.log"
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8"),
-    ],
+    handlers=[logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8")],
 )
 log = logging.getLogger("anz-creator")
 
 
-# ---------------------------------------------------------------------------
-# Error dialog (used when something fatal happens in --noconsole mode)
-# ---------------------------------------------------------------------------
 def show_error_dialog(title: str, message: str) -> None:
-    """Show native Windows error dialog. Safe to call from --noconsole exe."""
     try:
         import tkinter as tk
         from tkinter import messagebox
-
         root = tk.Tk()
         root.withdraw()
         messagebox.showerror(title, message)
         root.destroy()
     except Exception:
-        # last-resort fallback to Win32 MessageBox via ctypes
         try:
             import ctypes
             ctypes.windll.user32.MessageBoxW(0, message, title, 0x10)
         except Exception:
-            pass  # nothing more we can do
+            pass
 
 
-# ---------------------------------------------------------------------------
-# Server readiness check
-# ---------------------------------------------------------------------------
 def wait_for_server(port: int, timeout: float = 20.0) -> bool:
     import urllib.request
     import urllib.error
@@ -99,9 +69,6 @@ def wait_for_server(port: int, timeout: float = 20.0) -> bool:
     return False
 
 
-# ---------------------------------------------------------------------------
-# Chrome browser opening
-# ---------------------------------------------------------------------------
 def open_chrome(url: str) -> None:
     chrome_paths = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -118,46 +85,29 @@ def open_chrome(url: str) -> None:
             except Exception as e:
                 log.warning(f"Failed to open Chrome at {path}: {e}")
                 continue
-
-    # fallback: default browser
     log.info("Chrome not found, using default browser")
     webbrowser.open(url, new=2)
 
 
-# ---------------------------------------------------------------------------
-# Server runner (in-process, runs in separate thread)
-# ---------------------------------------------------------------------------
 def run_server(port: int) -> None:
-    """
-    Import server module and run uvicorn in this process.
-    Saat di-bundle PyInstaller --onefile, server.py sudah di-extract ke _MEIPASS,
-    jadi kita perlu sys.path.insert supaya bisa di-import.
-    """
     try:
-        # ensure bundled modules are importable
         bundle = bundle_root()
         if str(bundle) not in sys.path:
             sys.path.insert(0, str(bundle))
 
-        # set working directory to app_root (so outputs/, .env etc are beside exe)
         os.chdir(str(app_root()))
-
-        # Set port via env var (server.py reads SERVER_PORT)
         os.environ["SERVER_PORT"] = str(port)
 
         log.info(f"Starting server on port {port} (bundle={bundle}, cwd={os.getcwd()})")
 
-        # Import server module — this triggers FastAPI app creation
         import server as server_module  # noqa
-
-        # Run uvicorn programmatically
         import uvicorn
 
         config = uvicorn.Config(
             server_module.app,
             host="127.0.0.1",
             port=port,
-            log_config=None,   # avoid uvicorn messing with our logging
+            log_config=None,
             access_log=False,
         )
         uv_server = uvicorn.Server(config)
@@ -169,17 +119,27 @@ def run_server(port: int) -> None:
             "Anz-Creator: Server Error",
             f"Server gagal berjalan:\n\n{e}\n\nCek launcher.log untuk detail.",
         )
-        # force-exit the whole process so the browser tab isn't left hanging
         os._exit(1)
 
 
-# ---------------------------------------------------------------------------
-# Main entry
-# ---------------------------------------------------------------------------
 def main() -> int:
     try:
         root = app_root()
-        port = int(os.getenv("SERVER_PORT", "8080"))
+
+        # FIX: default port 2712, baca dari .env dulu kalau ada
+        env_file = root / ".env"
+        port = 2712  # default
+        if env_file.exists():
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("SERVER_PORT="):
+                    try:
+                        port = int(line.split("=", 1)[1].strip())
+                    except ValueError:
+                        pass
+                    break
+        # env var override
+        port = int(os.getenv("SERVER_PORT", str(port)))
 
         log.info("=" * 60)
         log.info("Anz-Creator Launcher starting")
@@ -190,7 +150,6 @@ def main() -> int:
         log.info(f"Port: {port}")
         log.info("=" * 60)
 
-        # Start server in background thread (daemon so it dies with main)
         server_thread = threading.Thread(
             target=run_server,
             args=(port,),
@@ -199,7 +158,6 @@ def main() -> int:
         )
         server_thread.start()
 
-        # Wait for server to be reachable
         if wait_for_server(port, timeout=20.0):
             log.info(f"✓ Server ready at http://localhost:{port}")
             open_chrome(f"http://localhost:{port}")
@@ -216,9 +174,6 @@ def main() -> int:
             )
             return 1
 
-        # Keep launcher alive — server thread is daemon, so we need to block here
-        # This blocks until the server thread dies (user closes app via task manager,
-        # tray icon, or OS signal)
         try:
             while server_thread.is_alive():
                 time.sleep(1)
