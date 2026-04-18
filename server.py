@@ -56,8 +56,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static after API routes defined (agar /api/* tidak ter-intercept)
-
 # --------------------------------------------------------------- In-memory jobs
 JOBS: Dict[str, Dict[str, Any]] = {}
 
@@ -110,13 +108,13 @@ def _ensure_keys_available() -> None:
 
 
 def _format_exception_error(e: Exception) -> Dict[str, Any]:
-    """Format an exception into a structured error response with traceback for debugging."""
+    """Format an exception into a structured error response."""
     tb = traceback.format_exc()
     logger.error(f"Request failed: {e}\n{tb}")
     return {
         "code": e.__class__.__name__,
         "message": str(e) or "Unknown error",
-        "traceback": tb.split("\n")[-10:],  # last 10 lines of traceback
+        "traceback": tb.split("\n")[-10:],
     }
 
 
@@ -253,7 +251,6 @@ async def upload_video(file: UploadFile = File(...)):
 def short_maker_find_viral(body: FindViralBody):
     _ensure_keys_available()
 
-    # Validate input
     if not body.source or not body.source.strip():
         raise HTTPException(
             status_code=400,
@@ -272,7 +269,7 @@ def short_maker_find_viral(body: FindViralBody):
         )
     except HTTPException:
         raise
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise HTTPException(status_code=500, detail=_format_exception_error(e))
 
 
@@ -301,7 +298,7 @@ async def short_maker_start(body: ShortMakerBody):
                 "end_seconds": result.end_seconds,
             }
             JOBS[jid]["status"] = "done"
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             JOBS[jid]["status"] = "error"
             JOBS[jid]["error"] = str(e)
 
@@ -314,10 +311,11 @@ async def short_maker_start(body: ShortMakerBody):
 def story_preview(body: StoryTellerBody):
     _ensure_keys_available()
 
-    if not body.prompt or not body.prompt.strip():
+    # FIX: was incorrectly checking body.prompt — field is body.title
+    if not body.title or not body.title.strip():
         raise HTTPException(
             status_code=400,
-            detail={"code": "MISSING_PROMPT", "message": "Prompt cerita wajib diisi."},
+            detail={"code": "MISSING_TITLE", "message": "Judul/topik cerita wajib diisi."},
         )
 
     st = StoryTeller(
@@ -336,7 +334,7 @@ def story_preview(body: StoryTellerBody):
         )
     except HTTPException:
         raise
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise HTTPException(status_code=500, detail=_format_exception_error(e))
 
 
@@ -365,7 +363,7 @@ async def story_start(body: StoryTellerBody):
                 "duration": result.duration,
             }
             JOBS[jid]["status"] = "done"
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             JOBS[jid]["status"] = "error"
             JOBS[jid]["error"] = str(e)
 
@@ -379,7 +377,6 @@ def job_status(jid: str):
     if jid not in JOBS:
         raise HTTPException(404, "Job tidak ditemukan.")
     job = JOBS[jid]
-    # return only last 20 progress logs for compactness
     return {
         "id": job["id"],
         "status": job["status"],
@@ -451,11 +448,9 @@ def _to_url(path_str: str) -> str:
 # --------------------------------------------------------------- Favicon
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
-    """Return favicon if exists, otherwise empty 204 response."""
     fav = STATIC_DIR / "favicon.ico"
     if fav.exists():
         return FileResponse(fav, media_type="image/x-icon")
-    # Return empty 204 No Content — stops browser from retrying
     from fastapi import Response
     return Response(status_code=204)
 
