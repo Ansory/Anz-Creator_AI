@@ -32,7 +32,14 @@ from core.api_rotator import AllKeysExhaustedError, get_rotator
 from core.short_maker import ShortMaker, ShortMakerOptions
 from core.story_teller import StoryTeller, StoryTellerOptions
 
-load_dotenv()
+# --------------------------------------------------------------- ROOT dulu sebelum apapun
+# Selalu resolve ke folder tempat server.py berada,
+# bukan current working directory — ini fix utama agar .env selalu terbaca
+ROOT = Path(__file__).resolve().parent
+
+# --------------------------------------------------------------- Load .env dari folder server.py
+# override=True supaya nilai di .env selalu menang atas env system
+load_dotenv(dotenv_path=ROOT / ".env", override=True)
 
 # --------------------------------------------------------------- Version
 try:
@@ -41,39 +48,55 @@ except ImportError:
     VERSION = "dev"
 
 # --------------------------------------------------------------- Config
-ROOT = Path(__file__).parent
 STATIC_DIR = ROOT / "static"
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(ROOT / "outputs"))).resolve()
 UPLOAD_DIR = OUTPUT_DIR / ".uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 PORT = int(os.getenv("SERVER_PORT", "2712"))
 
+# --------------------------------------------------------------- Rotator + env keys
 _rotator = get_rotator()
 _env_keys = os.getenv("GEMINI_API_KEYS", "").strip()
 if _env_keys:
-    _rotator.add_keys([k.strip() for k in _env_keys.split(",") if k.strip()], label_prefix="env-")
+    _rotator.add_keys(
+        [k.strip() for k in _env_keys.split(",") if k.strip()],
+        label_prefix="env-"
+    )
 
+# --------------------------------------------------------------- App
 app = FastAPI(title="Anz-Creator", version=VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 JOBS: Dict[str, Dict[str, Any]] = {}
+
 
 def _new_job() -> str:
     jid = uuid.uuid4().hex
     JOBS[jid] = {"id": jid, "status": "queued", "progress": [], "result": None, "error": None, "created_at": time.time()}
     return jid
 
+
 def _log_to_job(jid: str, msg: str) -> None:
     if jid in JOBS:
         JOBS[jid]["progress"].append({"t": time.time(), "msg": msg})
+
 
 def _ensure_keys_available() -> None:
     r = get_rotator()
     stats = r.get_stats()
     if stats.get("total", 0) == 0:
-        raise HTTPException(status_code=503, detail={"code": "NO_KEYS", "message": "Belum ada Gemini API key. Buka menu 'API Manager' untuk menambahkan key.", "hint": "Dapatkan free API key di https://aistudio.google.com/app/apikey"})
+        raise HTTPException(status_code=503, detail={
+            "code": "NO_KEYS",
+            "message": "Belum ada Gemini API key. Buka menu 'API Manager' untuk menambahkan key.",
+            "hint": "Dapatkan free API key di https://aistudio.google.com/app/apikey"
+        })
     if stats.get("active", 0) == 0:
-        raise HTTPException(status_code=503, detail={"code": "KEYS_EXHAUSTED", "message": f"Semua {stats['total']} API key sudah mencapai limit quota atau tidak valid.", "hint": "Free tier Gemini: 15 RPM, 1500 requests/hari per key."})
+        raise HTTPException(status_code=503, detail={
+            "code": "KEYS_EXHAUSTED",
+            "message": f"Semua {stats['total']} API key sudah mencapai limit quota atau tidak valid.",
+            "hint": "Free tier Gemini: 15 RPM, 1500 requests/hari per key."
+        })
+
 
 def _format_exception_error(e: Exception) -> Dict[str, Any]:
     tb = traceback.format_exc()
@@ -127,17 +150,22 @@ class FindViralBody(BaseModel):
 # --------------------------------------------------------------- System
 @app.get("/api/health")
 def health():
-    return {"status": "online", "version": VERSION}
+    # Sertakan port agar frontend bisa sinkron tampilan
+    return {"status": "online", "version": VERSION, "port": PORT}
 
 @app.get("/api/system/resources")
 def system_resources():
     cpu = psutil.cpu_percent(interval=0.3)
     mem = psutil.virtual_memory()
-    return {"cpu_percent": round(cpu, 1), "ram_percent": round(mem.percent, 1), "ram_used_gb": round(mem.used / (1024**3), 2), "ram_total_gb": round(mem.total / (1024**3), 2)}
+    return {
+        "cpu_percent": round(cpu, 1),
+        "ram_percent": round(mem.percent, 1),
+        "ram_used_gb": round(mem.used / (1024**3), 2),
+        "ram_total_gb": round(mem.total / (1024**3), 2),
+    }
 
 @app.post("/api/system/shutdown")
 async def system_shutdown():
-    """Matikan server."""
     async def _do():
         await asyncio.sleep(0.6)
         logger.info("Shutdown via API")
@@ -147,7 +175,6 @@ async def system_shutdown():
 
 @app.post("/api/system/restart")
 async def system_restart():
-    """Restart server — spawn proses baru lalu kill yang lama."""
     async def _do():
         await asyncio.sleep(0.6)
         logger.info("Restart via API")
@@ -238,7 +265,18 @@ async def short_maker_start(body: ShortMakerBody):
             opts = ShortMakerOptions(**body.model_dump())
             sm = ShortMaker(get_rotator(), OUTPUT_DIR)
             result = await asyncio.to_thread(sm.process, opts, lambda m: _log_to_job(jid, m))
-            JOBS[jid]["result"] = {"output_path": result.output_path, "output_url": _to_url(result.output_path), "thumbnail_url": _to_url(result.thumbnail_path), "title": result.title, "description": result.description, "tags": result.tags, "pinned_comment": result.pinned_comment, "duration": result.duration, "start_seconds": result.start_seconds, "end_seconds": result.end_seconds}
+            JOBS[jid]["result"] = {
+                "output_path": result.output_path,
+                "output_url": _to_url(result.output_path),
+                "thumbnail_url": _to_url(result.thumbnail_path),
+                "title": result.title,
+                "description": result.description,
+                "tags": result.tags,
+                "pinned_comment": result.pinned_comment,
+                "duration": result.duration,
+                "start_seconds": result.start_seconds,
+                "end_seconds": result.end_seconds,
+            }
             JOBS[jid]["status"] = "done"
         except Exception as e:
             JOBS[jid]["status"] = "error"
@@ -253,7 +291,11 @@ def story_preview(body: StoryTellerBody):
     _ensure_keys_available()
     if not body.title or not body.title.strip():
         raise HTTPException(status_code=400, detail={"code": "MISSING_TITLE", "message": "Judul/topik cerita wajib diisi."})
-    st = StoryTeller(get_rotator(), OUTPUT_DIR, pexels_key=os.getenv("PEXELS_API_KEY", ""), pixabay_key=os.getenv("PIXABAY_API_KEY", ""))
+    st = StoryTeller(
+        get_rotator(), OUTPUT_DIR,
+        pexels_key=os.getenv("PEXELS_API_KEY", ""),
+        pixabay_key=os.getenv("PIXABAY_API_KEY", ""),
+    )
     try:
         opts = StoryTellerOptions(**body.model_dump())
         scenes = st.preview_script(opts)
@@ -272,9 +314,20 @@ async def story_start(body: StoryTellerBody):
         JOBS[jid]["status"] = "running"
         try:
             opts = StoryTellerOptions(**body.model_dump())
-            st = StoryTeller(get_rotator(), OUTPUT_DIR, pexels_key=os.getenv("PEXELS_API_KEY", ""), pixabay_key=os.getenv("PIXABAY_API_KEY", ""))
+            st = StoryTeller(
+                get_rotator(), OUTPUT_DIR,
+                pexels_key=os.getenv("PEXELS_API_KEY", ""),
+                pixabay_key=os.getenv("PIXABAY_API_KEY", ""),
+            )
             result = await asyncio.to_thread(st.process, opts, lambda m: _log_to_job(jid, m))
-            JOBS[jid]["result"] = {"output_path": result.output_path, "output_url": _to_url(result.output_path), "thumbnail_url": _to_url(result.thumbnail_path), "script": result.script, "scenes": result.scenes, "duration": result.duration}
+            JOBS[jid]["result"] = {
+                "output_path": result.output_path,
+                "output_url": _to_url(result.output_path),
+                "thumbnail_url": _to_url(result.thumbnail_path),
+                "script": result.script,
+                "scenes": result.scenes,
+                "duration": result.duration,
+            }
             JOBS[jid]["status"] = "done"
         except Exception as e:
             JOBS[jid]["status"] = "error"
@@ -350,6 +403,8 @@ if __name__ == "__main__":
     import uvicorn
     print(f"\n╔══════════════════════════════════════════════╗")
     print(f"║      ANZ-CREATOR  //  AI CONTENT STUDIO       ║")
-    print(f"║      Server running at http://localhost:{PORT}   ║")
+    print(f"║      Port  : {PORT}                            ║")
+    print(f"║      URL   : http://localhost:{PORT}           ║")
+    print(f"║      .env  : {ROOT / '.env'}  ║")
     print(f"╚══════════════════════════════════════════════╝\n")
     uvicorn.run("server:app", host="127.0.0.1", port=PORT, log_level="info")
