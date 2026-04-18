@@ -17,7 +17,7 @@ from .api_rotator import APIKeyRotator, AllKeysExhaustedError
 class GeminiClient:
     # FIX: "gemini-3-flash-preview" is not a valid model name.
     # Use "gemini-1.5-flash" (free tier) or "gemini-1.5-pro".
-    MODEL_TEXT = "gemini-3-flash-preview"
+    MODEL_TEXT = "gemini-1.5-flash"
     MAX_RETRIES_PER_CALL = 10  # max swap key sebelum menyerah
 
     def __init__(self, rotator: APIKeyRotator):
