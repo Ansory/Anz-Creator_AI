@@ -7,12 +7,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import shutil
 import time
+import traceback
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger("anz-creator.server")
 
 import psutil
 from dotenv import load_dotenv
@@ -74,6 +78,46 @@ def _new_job() -> str:
 def _log_to_job(jid: str, msg: str) -> None:
     if jid in JOBS:
         JOBS[jid]["progress"].append({"t": time.time(), "msg": msg})
+
+
+def _ensure_keys_available() -> None:
+    """Raise 503 with helpful message if no Gemini keys configured."""
+    r = get_rotator()
+    stats = r.get_stats()
+    total = stats.get("total", 0)
+    active = stats.get("active", 0)
+
+    if total == 0:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "NO_KEYS",
+                "message": "Belum ada Gemini API key. Buka menu 'API Manager' untuk menambahkan key, "
+                           "atau isi GEMINI_API_KEYS di file .env lalu restart aplikasi.",
+                "hint": "Dapatkan free API key di https://aistudio.google.com/app/apikey",
+            },
+        )
+    if active == 0:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "KEYS_EXHAUSTED",
+                "message": f"Semua {total} API key sudah mencapai limit quota atau tidak valid. "
+                           f"Coba lagi 1 jam lagi, atau tambah key baru di menu 'API Manager'.",
+                "hint": "Free tier Gemini: 15 RPM, 1500 requests/hari per key.",
+            },
+        )
+
+
+def _format_exception_error(e: Exception) -> Dict[str, Any]:
+    """Format an exception into a structured error response with traceback for debugging."""
+    tb = traceback.format_exc()
+    logger.error(f"Request failed: {e}\n{tb}")
+    return {
+        "code": e.__class__.__name__,
+        "message": str(e) or "Unknown error",
+        "traceback": tb.split("\n")[-10:],  # last 10 lines of traceback
+    }
 
 
 # --------------------------------------------------------------- Schemas
@@ -207,15 +251,29 @@ async def upload_video(file: UploadFile = File(...)):
 # --------------------------------------------------------------- Short Maker
 @app.post("/api/short-maker/find-viral")
 def short_maker_find_viral(body: FindViralBody):
+    _ensure_keys_available()
+
+    # Validate input
+    if not body.source or not body.source.strip():
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "MISSING_SOURCE", "message": "URL YouTube atau file path wajib diisi."},
+        )
+
     r = get_rotator()
     sm = ShortMaker(r, OUTPUT_DIR)
     try:
         result = sm.find_viral_moments(body.source, body.source_type, body.topic, body.language)
         return {"ok": True, "data": result}
     except AllKeysExhaustedError as e:
-        raise HTTPException(503, str(e))
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "KEYS_EXHAUSTED", "message": str(e)},
+        )
+    except HTTPException:
+        raise
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail=_format_exception_error(e))
 
 
 @app.post("/api/short-maker/start")
@@ -254,6 +312,14 @@ async def short_maker_start(body: ShortMakerBody):
 # --------------------------------------------------------------- Story Teller
 @app.post("/api/story-teller/preview")
 def story_preview(body: StoryTellerBody):
+    _ensure_keys_available()
+
+    if not body.prompt or not body.prompt.strip():
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "MISSING_PROMPT", "message": "Prompt cerita wajib diisi."},
+        )
+
     st = StoryTeller(
         get_rotator(), OUTPUT_DIR,
         pexels_key=os.getenv("PEXELS_API_KEY", ""),
@@ -264,9 +330,14 @@ def story_preview(body: StoryTellerBody):
         scenes = st.preview_script(opts)
         return {"ok": True, "scenes": scenes}
     except AllKeysExhaustedError as e:
-        raise HTTPException(503, str(e))
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "KEYS_EXHAUSTED", "message": str(e)},
+        )
+    except HTTPException:
+        raise
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail=_format_exception_error(e))
 
 
 @app.post("/api/story-teller/start")
@@ -375,6 +446,18 @@ def _to_url(path_str: str) -> str:
         return f"/files/{rel.as_posix()}"
     except ValueError:
         return ""
+
+
+# --------------------------------------------------------------- Favicon
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Return favicon if exists, otherwise empty 204 response."""
+    fav = STATIC_DIR / "favicon.ico"
+    if fav.exists():
+        return FileResponse(fav, media_type="image/x-icon")
+    # Return empty 204 No Content — stops browser from retrying
+    from fastapi import Response
+    return Response(status_code=204)
 
 
 # --------------------------------------------------------------- Static (last)
