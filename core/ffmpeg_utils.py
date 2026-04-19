@@ -88,7 +88,7 @@ def _no_console_flags() -> dict:
 
 # -------------------------------------------------------------- Low-level runners
 def run_ffmpeg(args: list[str], *, timeout: Optional[int] = None) -> subprocess.CompletedProcess:
-    cmd = [ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error", *args]
+    cmd = [ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error"] + args
     try:
         return subprocess.run(
             cmd,
@@ -255,22 +255,25 @@ def transform_aspect(
 
 
 # -------------------------------------------------------------- Subtitle burn
-def _escape_subtitle_path(p: str | Path) -> str:
+def _escape_ffmpeg_filter_path(p: str | Path) -> str:
     """
-    Escape path untuk filter 'subtitles=' di Windows/Unix.
-    Windows: ubah \\ jadi /, escape ':' setelah drive letter.
+    Escape path untuk digunakan dalam filter FFmpeg (contoh: subtitles).
+    - Ubah backslash ke forward slash
+    - Escape colon (drive letter) dan backslash
+    - Escape single quote
     """
     s = str(p).replace("\\", "/")
-    # Escape backslash (kalau ada sisa), apostrof, dan colon (drive letter)
-    s = s.replace(":", "\\:")
-    s = s.replace("'", "\\'")
+    # Escape colon hanya jika itu adalah drive letter (contoh: C:/)
+    if _is_windows() and len(s) > 1 and s[1] == ":":
+        s = s[0] + "\\:" + s[2:]
+    s = s.replace("'", "'\\''")  # escape single quote
     return s
 
 
 def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
                    use_gpu: bool = False, encoding: str = "balanced") -> str:
-    """Burn SRT subtitle ke video. Path SRT perlu di-escape untuk filter graph."""
-    srt_escaped = _escape_subtitle_path(srt_path)
+    """Burn SRT subtitle ke video."""
+    srt_escaped = _escape_ffmpeg_filter_path(srt_path)
     vf = (
         f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=22,"
         f"PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,"
@@ -284,6 +287,14 @@ def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
 
 
 # -------------------------------------------------------------- Concat
+def _escape_concat_list_path(p: str | Path) -> str:
+    """Escape path untuk file list concat demuxer (format: file '...')."""
+    s = str(p).replace("\\", "/")
+    # Escape single quote
+    s = s.replace("'", "'\\''")
+    return s
+
+
 def concat_videos(inputs: list[str | Path], dst: str | Path) -> str:
     """Concat videos dengan re-encode (aman untuk codec campuran)."""
     if not inputs:
@@ -292,8 +303,8 @@ def concat_videos(inputs: list[str | Path], dst: str | Path) -> str:
     listfile = Path(dst).with_suffix(".concat.txt")
     with open(listfile, "w", encoding="utf-8") as f:
         for p in inputs:
-            p_abs = str(Path(p).resolve()).replace("\\", "/")
-            f.write(f"file '{p_abs}'\n")
+            escaped = _escape_concat_list_path(p)
+            f.write(f"file '{escaped}'\n")
 
     try:
         run_ffmpeg([
@@ -346,7 +357,6 @@ def apply_ken_burns(src: str | Path, dst: str | Path, duration: float,
                     size: Tuple[int, int] = (1080, 1920)) -> str:
     """
     Terapkan efek slow zoom-in (Ken Burns) ke video/image.
-    Bagus untuk footage statis di story teller.
     """
     W, H = size
     fps = 30
