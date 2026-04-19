@@ -26,6 +26,16 @@ LENGTH_PRESETS = {
     "long": (300, 25),
 }
 
+# Mapping mood UI -> nama file yang mungkin ada di assets/bgm/
+# (key = pilihan UI, value = list kandidat nama file tanpa ekstensi, prioritas urut)
+BGM_MOOD_ALIASES: Dict[str, List[str]] = {
+    "epic": ["epic", "cinematic", "action"],
+    "sad": ["sad", "dark", "emotional"],
+    "calm": ["calm", "romantic", "soft"],
+    "upbeat": ["upbeat", "happy", "motivational"],
+    "none": [],
+}
+
 
 @dataclass
 class StoryTellerOptions:
@@ -180,6 +190,18 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
             fast_path.replace(dst)
         return dst
 
+    @staticmethod
+    def _escape_drawtext(text: str) -> str:
+        """Escape karakter khusus untuk ffmpeg drawtext filter."""
+        # Urutan penting: backslash dulu, baru yang lain
+        return (
+            text.replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", "\\'")
+            .replace("%", "\\%")
+            .replace(",", "\\,")
+        )
+
     def _render_scene(self, scene: Scene, size: tuple[int, int]) -> Path:
         W, H = size
         out = self.work_dir / f"scene_{scene.index:03d}_{uuid.uuid4().hex[:6]}.mp4"
@@ -203,12 +225,14 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
                 str(out),
             ])
         else:
+            safe_text = self._escape_drawtext(scene.text[:60])
             ff.run_ffmpeg([
                 "-f", "lavfi",
-                "-i", f"color=c=0x06080f:s={W}x{H}:d={dur:.2f},"
-                      f"drawtext=text='{scene.text[:40]}':fontcolor=white:fontsize=36:"
-                      f"x=(w-text_w)/2:y=(h-text_h)/2",
+                "-i", f"color=c=0x06080f:s={W}x{H}:d={dur:.2f}",
                 "-i", str(scene.audio_path),
+                "-vf",
+                f"drawtext=text='{safe_text}':fontcolor=white:fontsize=36:"
+                f"x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=6",
                 "-t", f"{dur:.2f}",
                 "-c:v", "libx264", "-preset", "fast", "-crf", "22",
                 "-c:a", "aac", "-pix_fmt", "yuv420p",
@@ -299,11 +323,11 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
         else:
             shutil.copy(with_sub, final_path)
 
-        thumb_path = self.output_dir / f"story_{job_id}_thumb.jpg"
+        thumb_path: Optional[Path] = self.output_dir / f"story_{job_id}_thumb.jpg"
         try:
             ff.extract_frame(final_path, thumb_path, at=min(2.0, ff.get_duration(final_path) / 2))
         except Exception:
-            thumb_path = Path()
+            thumb_path = None
 
         for p in self.work_dir.glob(f"*_{job_id}*"):
             p.unlink(missing_ok=True)
@@ -312,7 +336,7 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
 
         return StoryResult(
             output_path=str(final_path),
-            thumbnail_path=str(thumb_path) if thumb_path else "",
+            thumbnail_path=str(thumb_path) if thumb_path and thumb_path.exists() else "",
             script="\n\n".join(sc.text for sc in scenes),
             scenes=[{"text": sc.text, "keyword": sc.keyword, "duration": sc.duration}
                     for sc in scenes],
@@ -331,12 +355,23 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
         return int(h * 9 / 16), h
 
     def _find_bgm(self, mood: str) -> Optional[Path]:
-        if mood == "none":
+        if not mood or mood == "none":
             return None
-        for base in [Path("assets/bgm"), Path(__file__).parent.parent / "assets" / "bgm"]:
-            p = base / f"{mood}.mp3"
-            if p.exists():
-                return p
+        candidates = BGM_MOOD_ALIASES.get(mood, [mood])
+        # fallback: cari ekstensi .mp3 / .m4a / .wav
+        exts = (".mp3", ".m4a", ".wav", ".ogg")
+        search_dirs: List[Path] = [
+            Path("assets") / "bgm",
+            Path(__file__).resolve().parent.parent / "assets" / "bgm",
+        ]
+        for base in search_dirs:
+            if not base.exists():
+                continue
+            for name in candidates:
+                for ext in exts:
+                    p = base / f"{name}{ext}"
+                    if p.exists():
+                        return p
         return None
 
     def preview_script(self, opts: StoryTellerOptions) -> List[Dict]:

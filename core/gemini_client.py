@@ -15,10 +15,10 @@ from .api_rotator import APIKeyRotator, AllKeysExhaustedError
 
 
 class GeminiClient:
-    # FIX: "gemini-3-flash-preview" is not a valid model name.
-    # Use "gemini-1.5-flash" (free tier) or "gemini-1.5-pro".
+    # Gunakan model yang tersedia di free tier Gemini.
     MODEL_TEXT = "gemini-1.5-flash"
     MAX_RETRIES_PER_CALL = 10  # max swap key sebelum menyerah
+    MAX_OUTPUT_TOKENS = 8192
 
     def __init__(self, rotator: APIKeyRotator):
         self.rotator = rotator
@@ -40,7 +40,7 @@ class GeminiClient:
                 genai.configure(api_key=key)
                 gen_config: Dict[str, Any] = {
                     "temperature": temperature,
-                    "max_output_tokens": 4096,
+                    "max_output_tokens": self.MAX_OUTPUT_TOKENS,
                 }
                 if json_mode:
                     gen_config["response_mime_type"] = "application/json"
@@ -50,7 +50,19 @@ class GeminiClient:
                     generation_config=gen_config,
                 )
                 resp = model.generate_content(prompt)
-                text = (resp.text or "").strip()
+                text = ""
+                try:
+                    text = (resp.text or "").strip()
+                except Exception:
+                    # Kalau .text raise (mis. safety block), gabung dari candidates
+                    for c in getattr(resp, "candidates", []) or []:
+                        for part in getattr(getattr(c, "content", None), "parts", []) or []:
+                            t = getattr(part, "text", None)
+                            if t:
+                                text += t
+                    text = text.strip()
+                if not text:
+                    raise RuntimeError("Gemini mengembalikan response kosong.")
                 self.rotator.mark_success(key)
                 return text
             except Exception as e:  # noqa: BLE001
@@ -62,8 +74,7 @@ class GeminiClient:
                 if "api key" in msg or "invalid" in msg or "permission" in msg or "401" in msg or "403" in msg:
                     self.rotator.mark_invalid(key)
                     continue
-                # error lain: mark invalid & retry sekali
-                self.rotator.mark_invalid(key)
+                # error lain: retry pakai key berikutnya
                 continue
 
         raise RuntimeError(f"Gemini gagal setelah retry. Error terakhir: {last_err}")
