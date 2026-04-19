@@ -1,8 +1,6 @@
 name: Build Anz-Creator
 
 on:
-  # HANYA jalan kalau di-trigger manual dari tab Actions GitHub
-  # Push ke main TIDAK otomatis trigger build
   workflow_dispatch:
     inputs:
       bump:
@@ -36,7 +34,6 @@ jobs:
         id: bump
         shell: bash
         run: |
-          # Get latest tag, default v0.0.0 if none exists
           LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
           if [ -z "$LATEST_TAG" ]; then
             LATEST_TAG="v0.0.0"
@@ -132,10 +129,8 @@ jobs:
       - name: Build .exe with PyInstaller
         shell: pwsh
         run: |
-          # version.py sudah di-update & di-commit oleh job 'version' di atas
-          # server.py akan import VERSION dari version.py otomatis saat runtime
           $version = "${{ needs.version.outputs.version }}"
-          echo "Building version: $version"
+          Write-Host "Building version: $version"
 
           pyinstaller --onefile --noconsole `
             --name "Anz-Creator" `
@@ -154,6 +149,10 @@ jobs:
             --collect-all "google.generativeai" `
             --collect-all "gtts" `
             launcher.py
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "PyInstaller failed with exit code $LASTEXITCODE"
+          }
 
       - name: Prepare release folder
         shell: pwsh
