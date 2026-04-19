@@ -344,12 +344,17 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
         heights = {"1080p": 1080, "720p": 720, "480p": 480}
         h = heights.get(quality, 1080)
         if aspect == "9:16":
-            return int(h * 9 / 16), h
-        if aspect == "16:9":
-            return int(h * 16 / 9), h
-        if aspect == "1:1":
-            return h, h
-        return int(h * 9 / 16), h
+            w = int(h * 9 / 16)
+        elif aspect == "16:9":
+            w = int(h * 16 / 9)
+        elif aspect == "1:1":
+            w = h
+        else:
+            w = int(h * 9 / 16)
+        # Pastikan genap
+        w = w // 2 * 2
+        h = h // 2 * 2
+        return w, h
 
     def _find_bgm(self, mood: str) -> Optional[Path]:
         if not mood or mood == "none":
