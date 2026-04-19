@@ -98,6 +98,7 @@ class ShortMaker:
 
     # ------------------------------------------------------- Download
     def _download_youtube(self, url: str, progress_cb=None) -> Path:
+        """Download video pakai yt-dlp. Return path file."""
         try:
             import yt_dlp
         except ImportError as e:
@@ -189,14 +190,18 @@ PENTING:
 
     # ------------------------------------------------------- Subtitle
     def _generate_srt(self, video_path: Path, srt_path: Path, duration: float) -> None:
+        """
+        Generate SRT placeholder sederhana.
+        Note: untuk transkripsi akurat, idealnya pakai Whisper/Gemini Audio.
+        """
         # coba pakai Whisper kalau ada
         try:
-            import whisper
+            import whisper  # type: ignore
             model = whisper.load_model("base")
             result = model.transcribe(str(video_path))
             self._write_srt_from_whisper(result, srt_path)
             return
-        except (ImportError, Exception):
+        except Exception:
             pass
 
         # Fallback: satu baris captions
@@ -260,6 +265,9 @@ PENTING:
             start = metadata["start_seconds"]
             end = metadata["end_seconds"]
 
+        # Validasi durasi
+        if end - start < 1.0:
+            end = min(start + 5, duration)
         log(f"Clip: {start:.1f}s → {end:.1f}s")
 
         # 3. Cut
@@ -301,7 +309,6 @@ PENTING:
         safe_title = _safe_filename(metadata.get("title", "clip"))
         final_name = f"{safe_title}_{job_id}.mp4"
         final_path = self.output_dir / final_name
-        # shutil.move aman untuk cross-drive & akan replace existing di Windows
         if final_path.exists():
             final_path.unlink()
         shutil.move(str(final_src), str(final_path))
