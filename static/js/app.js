@@ -3,6 +3,14 @@
    Vanilla JS, no framework. Single-file app logic.
    ================================================================ */
 
+/* -------------------- Security Utilities -------------------- */
+// Mencegah DOM XSS saat merender data dari AI/Backend ke innerHTML
+function escapeHtml(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* -------------------- API -------------------- */
 const API = {
   health: () => fetch('/api/health').then(r => r.json()),
   resources: () => fetch('/api/system/resources').then(r => r.json()),
@@ -102,10 +110,6 @@ function renderError(container, err) {
   container.innerHTML = html;
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
 /* -------------------- Nav -------------------- */
 const NAV_TITLES = {
   'short-maker': 'SHORT MAKER',
@@ -145,7 +149,7 @@ document.querySelectorAll('.seg').forEach(seg => {
     item.classList.add('active');
     if (seg.id === 'keys-mode') {
       API.setMode(item.dataset.mode).then(() => {
-        toast(`Mode rotation: ${item.dataset.mode}`);
+        toast(`Mode rotation: ${escapeHtml(item.dataset.mode)}`);
         loadKeys();
       });
     }
@@ -195,8 +199,9 @@ async function loadKeys() {
   document.getElementById('keys-invalid').textContent = stats.invalid;
   document.getElementById('api-active').textContent = stats.active;
   document.getElementById('api-total').textContent = stats.total;
-  document.getElementById('api-mode').textContent = data.mode;
+  document.getElementById('api-mode').textContent = escapeHtml(data.mode);
   document.getElementById('badge-keys').textContent = `${stats.active}/${stats.total} KEYS`;
+  
   const rpTotal = document.getElementById('rp-total');
   if (rpTotal) {
     rpTotal.textContent = stats.total;
@@ -204,24 +209,28 @@ async function loadKeys() {
     document.getElementById('rp-quota').textContent = stats.quota_exceeded;
     document.getElementById('rp-invalid').textContent = stats.invalid;
   }
+  
   document.querySelectorAll('#keys-mode .seg__item').forEach(i => {
     i.classList.toggle('active', i.dataset.mode === data.mode);
   });
+  
   const list = document.getElementById('keys-list');
   if (!data.keys || !data.keys.length) {
     list.innerHTML = '<div class="empty-state">Belum ada API key. Tambah di atas.</div>';
     return;
   }
+  
   list.innerHTML = data.keys.map((k, i) => {
     const last = k.last_used ? new Date(k.last_used * 1000).toLocaleTimeString() : '—';
     return `<div class="key-row">
       <div class="key-row__num">#${String(i + 1).padStart(2, '0')}</div>
-      <div class="key-row__masked">${k.masked}</div>
-      <div class="key-row__status ${k.status}">${k.status.replace('_', ' ')}</div>
+      <div class="key-row__masked">${escapeHtml(k.masked)}</div>
+      <div class="key-row__status ${escapeHtml(k.status)}">${escapeHtml(k.status.replace('_', ' '))}</div>
       <div class="key-row__usage">used: ${k.usage_count} · last: ${last}</div>
-      <button class="btn btn--sm btn--danger" data-masked="${k.masked}">✕</button>
+      <button class="btn btn--sm btn--danger" data-masked="${escapeHtml(k.masked)}">✕</button>
     </div>`;
   }).join('');
+  
   list.querySelectorAll('[data-masked]').forEach(btn => {
     btn.addEventListener('click', async () => {
       await API.removeKey(btn.dataset.masked);
@@ -244,7 +253,7 @@ document.getElementById('keys-add').addEventListener('click', async () => {
 document.getElementById('keys-file').addEventListener('change', async (e) => {
   const f = e.target.files[0]; if (!f) return;
   const r = await API.importKeys(f);
-  toast(`${r.added} key diimport dari ${f.name}`);
+  toast(`${r.added} key diimport dari ${escapeHtml(f.name)}`);
   e.target.value = '';
   loadKeys();
 });
@@ -266,7 +275,7 @@ document.getElementById('sm-file').addEventListener('change', async (e) => {
   try {
     const r = await API.upload(f);
     uploadedFilePath = r.path;
-    document.getElementById('sm-file-info').textContent = `✓ ${r.name} uploaded (${(r.size/1024/1024).toFixed(1)} MB)`;
+    document.getElementById('sm-file-info').textContent = `✓ ${escapeHtml(r.name)} uploaded (${(r.size/1024/1024).toFixed(1)} MB)`;
     const preview = document.getElementById('sm-preview');
     const url = URL.createObjectURL(f);
     preview.innerHTML = `<video src="${url}" controls></video>`;
@@ -281,7 +290,7 @@ document.getElementById('sm-url').addEventListener('input', (e) => {
   if (!url) return;
   const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([^?&]+)/);
   if (m) {
-    const vid = m[1];
+    const vid = escapeHtml(m[1]);
     document.getElementById('sm-preview').innerHTML =
       `<iframe width="100%" height="100%" src="https://www.youtube.com/embed/${vid}" frameborder="0" allowfullscreen></iframe>`;
   }
@@ -292,38 +301,45 @@ document.getElementById('sm-find-viral').addEventListener('click', async () => {
   const sourceType = document.querySelector('.tabs__tab.active').dataset.tab;
   const source = sourceType === 'url' ? document.getElementById('sm-url').value.trim() : uploadedFilePath;
   if (!source) return toast('Masukkan URL atau upload file dulu', 'err');
+  
   const btn = document.getElementById('sm-find-viral');
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> Scanning...';
+  
   const list = document.getElementById('sm-viral-list');
   list.innerHTML = '<div class="text-sm text-muted">AI sedang menganalisis video...</div>';
+  
   try {
     const r = await API.smFindViral({
       source, source_type: sourceType,
       topic: document.getElementById('sm-topic').value,
       language: 'id',
     });
+    
     if (!r.ok) {
       const err = await parseApiError(r);
       renderError(list, err);
       toast(err.message, 'err');
       return;
     }
+    
     const data = await r.json();
     const moments = data.data?.moments || [];
+    
     if (!moments.length) {
       list.innerHTML = '<div class="empty-state">Tidak ada momen terdeteksi.</div>';
     } else {
       list.innerHTML = moments.map(m => `
         <div class="viral-moment" data-start="${m.start_seconds}" data-end="${m.end_seconds}">
-          <div class="viral-moment__score">${m.score || '—'}</div>
+          <div class="viral-moment__score">${escapeHtml(m.score || '—')}</div>
           <div class="viral-moment__body">
-            <h4>${m.title}</h4>
-            <p>${m.hook || ''}</p>
+            <h4>${escapeHtml(m.title)}</h4>
+            <p>${escapeHtml(m.hook || '')}</p>
           </div>
           <div class="viral-moment__time">${fmtTime(m.start_seconds)} → ${fmtTime(m.end_seconds)}</div>
         </div>
       `).join('');
+      
       list.querySelectorAll('.viral-moment').forEach(el => {
         el.addEventListener('click', () => {
           document.getElementById('sm-duration').value = 'custom';
@@ -365,6 +381,7 @@ document.getElementById('sm-start').addEventListener('click', async () => {
   const source = sourceType === 'url' ?
     document.getElementById('sm-url').value.trim() : uploadedFilePath;
   if (!source) return toast('Masukkan URL atau upload file', 'err');
+  
   const durPreset = document.getElementById('sm-duration').value;
   const body = {
     source, source_type: sourceType,
@@ -381,11 +398,13 @@ document.getElementById('sm-start').addEventListener('click', async () => {
     bypass_copyright: document.getElementById('sm-bypass').checked,
     language: 'id',
   };
+  
   const btn = document.getElementById('sm-start');
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> PROCESSING...';
   document.getElementById('sm-log').innerHTML = '';
   document.getElementById('sm-result').innerHTML = '';
+  
   try {
     const r = await API.smStart(body);
     await pollJob(r.job_id, 'sm-log', (result) => renderShortResult(result));
@@ -398,19 +417,20 @@ document.getElementById('sm-start').addEventListener('click', async () => {
 });
 
 function renderShortResult(result) {
+  const tagsHtml = (result.tags||[]).map(t => `<span class="tag-chip">#${escapeHtml(t)}</span>`).join('');
   document.getElementById('sm-result').innerHTML = `
     <div class="result-card">
       <h3>✓ CONVERSION COMPLETE</h3>
-      <video src="${result.output_url}" controls style="width:100%;max-height:300px;border:1px solid var(--border-glow)"></video>
+      <video src="${escapeHtml(result.output_url)}" controls style="width:100%;max-height:300px;border:1px solid var(--border-glow)"></video>
       <div class="divider"></div>
-      <div class="meta-row"><span class="meta-row__label">JUDUL</span><span class="meta-row__value">${result.title}</span></div>
+      <div class="meta-row"><span class="meta-row__label">JUDUL</span><span class="meta-row__value">${escapeHtml(result.title)}</span></div>
       <div class="meta-row"><span class="meta-row__label">DURASI</span><span class="meta-row__value">${result.duration.toFixed(1)} detik</span></div>
       <div class="meta-row"><span class="meta-row__label">SEGMEN</span><span class="meta-row__value">${fmtTime(result.start_seconds)} → ${fmtTime(result.end_seconds)}</span></div>
-      <div class="meta-row"><span class="meta-row__label">DESKRIPSI</span><span class="meta-row__value">${result.description}</span></div>
-      <div class="meta-row"><span class="meta-row__label">TAGS</span><span class="meta-row__value">${(result.tags||[]).map(t=>`<span class="tag-chip">#${t}</span>`).join('')}</span></div>
-      ${result.pinned_comment ? `<div class="meta-row"><span class="meta-row__label">PIN COMMENT</span><span class="meta-row__value">${result.pinned_comment}</span></div>` : ''}
+      <div class="meta-row"><span class="meta-row__label">DESKRIPSI</span><span class="meta-row__value">${escapeHtml(result.description)}</span></div>
+      <div class="meta-row"><span class="meta-row__label">TAGS</span><span class="meta-row__value">${tagsHtml}</span></div>
+      ${result.pinned_comment ? `<div class="meta-row"><span class="meta-row__label">PIN COMMENT</span><span class="meta-row__value">${escapeHtml(result.pinned_comment)}</span></div>` : ''}
       <div class="divider"></div>
-      <a class="btn" href="${result.output_url}" download>⤓ DOWNLOAD VIDEO</a>
+      <a class="btn" href="${escapeHtml(result.output_url)}" download>⤓ DOWNLOAD VIDEO</a>
     </div>`;
 }
 
@@ -434,10 +454,12 @@ function collectStoryOpts() {
 document.getElementById('st-preview').addEventListener('click', async () => {
   const opts = collectStoryOpts();
   if (!opts.title) return toast('Isi judul/topik dulu', 'err');
+  
   const btn = document.getElementById('st-preview');
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> Generating...';
   document.getElementById('st-script-list').innerHTML = '<div class="text-sm text-muted">AI sedang menulis naskah...</div>';
+  
   try {
     const r = await API.stPreview(opts);
     if (!r.ok) {
@@ -449,14 +471,15 @@ document.getElementById('st-preview').addEventListener('click', async () => {
     const data = await r.json();
     const scenes = data.scenes || [];
     const list = document.getElementById('st-script-list');
+    
     if (!scenes.length) {
       list.innerHTML = '<div class="empty-state">Naskah kosong, coba generate ulang.</div>';
     } else {
       list.innerHTML = scenes.map((s, i) => `
         <div class="scene-card">
           <div class="scene-card__num">SCENE ${String(i+1).padStart(2,'0')}</div>
-          <div>${s.text}</div>
-          <div class="scene-card__keyword">🎬 ${s.keyword}</div>
+          <div>${escapeHtml(s.text)}</div>
+          <div class="scene-card__keyword">🎬 ${escapeHtml(s.keyword)}</div>
         </div>`).join('');
     }
     toast(`${scenes.length} scene dibuat`);
@@ -477,6 +500,7 @@ document.getElementById('st-start').addEventListener('click', async () => {
   btn.innerHTML = '<span class="spin"></span> RENDERING...';
   document.getElementById('st-log').innerHTML = '';
   document.getElementById('st-result').innerHTML = '';
+  
   try {
     const r = await API.stStart(opts);
     await pollJob(r.job_id, 'st-log', (result) => renderStoryResult(result));
@@ -492,12 +516,12 @@ function renderStoryResult(result) {
   document.getElementById('st-result').innerHTML = `
     <div class="result-card">
       <h3>✓ STORY GENERATED</h3>
-      <video src="${result.output_url}" controls style="width:100%;max-height:300px;border:1px solid var(--border-glow)"></video>
+      <video src="${escapeHtml(result.output_url)}" controls style="width:100%;max-height:300px;border:1px solid var(--border-glow)"></video>
       <div class="divider"></div>
       <div class="meta-row"><span class="meta-row__label">DURASI</span><span class="meta-row__value">${result.duration.toFixed(1)} detik</span></div>
       <div class="meta-row"><span class="meta-row__label">SCENES</span><span class="meta-row__value">${result.scenes?.length || 0}</span></div>
       <div class="divider"></div>
-      <a class="btn" href="${result.output_url}" download>⤓ DOWNLOAD VIDEO</a>
+      <a class="btn" href="${escapeHtml(result.output_url)}" download>⤓ DOWNLOAD VIDEO</a>
     </div>`;
 }
 
@@ -515,8 +539,8 @@ async function pollJob(jid, logElId, onDone) {
           onDone?.(data.result);
           resolve(data);
         } else if (data.status === 'error') {
-          appendLog(logEl, '✗ ' + (data.error || 'Unknown error'), 'err');
-          toast(data.error, 'err');
+          appendLog(logEl, '✗ ' + escapeHtml(data.error || 'Unknown error'), 'err');
+          toast(escapeHtml(data.error), 'err');
           reject(new Error(data.error || 'job failed'));
         }
       };
@@ -524,6 +548,7 @@ async function pollJob(jid, logElId, onDone) {
     } else {
       fallbackPoll();
     }
+    
     function fallbackPoll() {
       let seen = 0;
       const interval = setInterval(async () => {
@@ -539,8 +564,8 @@ async function pollJob(jid, logElId, onDone) {
             resolve(data);
           } else if (data.status === 'error') {
             clearInterval(interval);
-            appendLog(logEl, '✗ ' + (data.error || 'error'), 'err');
-            toast(data.error, 'err');
+            appendLog(logEl, '✗ ' + escapeHtml(data.error || 'error'), 'err');
+            toast(escapeHtml(data.error), 'err');
             reject(new Error(data.error));
           }
         } catch (e) {
@@ -555,15 +580,15 @@ async function pollJob(jid, logElId, onDone) {
 function tryOpenWebSocket(jid) {
   try {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    return new WebSocket(`${proto}://${location.host}/ws/job/${jid}`);
+    return new WebSocket(`${proto}://${location.host}/ws/job/${encodeURIComponent(jid)}`);
   } catch (e) { return null; }
 }
 
 function appendLog(el, msg, cls = '') {
   const time = new Date().toLocaleTimeString();
   const div = document.createElement('div');
-  div.className = 'log-entry ' + cls;
-  div.innerHTML = `<span class="log-entry__time">${time}</span><span class="log-entry__msg">${msg}</span>`;
+  div.className = 'log-entry ' + escapeHtml(cls);
+  div.innerHTML = `<span class="log-entry__time">${escapeHtml(time)}</span><span class="log-entry__msg">${escapeHtml(msg)}</span>`;
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
 }
@@ -579,11 +604,11 @@ async function loadOutputs() {
   list.innerHTML = data.items.map(item => `
     <div class="key-row" style="grid-template-columns: 1fr auto auto">
       <div>
-        <div class="key-row__masked">${item.name}</div>
+        <div class="key-row__masked">${escapeHtml(item.name)}</div>
         <div class="text-xs text-muted">${item.size_mb} MB · ${new Date(item.modified*1000).toLocaleString()}</div>
       </div>
-      <a class="btn btn--sm" href="${item.url}" target="_blank">▶ OPEN</a>
-      <a class="btn btn--sm btn--ghost" href="${item.url}" download>⤓ DOWNLOAD</a>
+      <a class="btn btn--sm" href="${escapeHtml(item.url)}" target="_blank">▶ OPEN</a>
+      <a class="btn btn--sm btn--ghost" href="${escapeHtml(item.url)}" download>⤓ DOWNLOAD</a>
     </div>`).join('');
 }
 
@@ -612,9 +637,8 @@ function showOverlay(mode) {
 async function doRestart() {
   if (!confirm('Restart server sekarang?')) return;
   showOverlay('restart');
-  try {
-    await API.restart();
-  } catch (_) {}
+  try { await API.restart(); } catch (_) {}
+  
   let attempts = 0;
   const poll = setInterval(async () => {
     attempts++;
@@ -636,9 +660,7 @@ async function doRestart() {
 
 async function doShutdown() {
   if (!confirm('Matikan server? Kamu perlu jalankan ulang manual dari terminal.')) return;
-  try {
-    await API.shutdown();
-  } catch (_) {}
+  try { await API.shutdown(); } catch (_) {}
   showOverlay('shutdown');
 }
 
@@ -657,15 +679,15 @@ async function doShutdown() {
   try {
     const h = await API.health();
     if (h.version) {
-      document.getElementById('badge-version').textContent = 'v' + h.version;
+      document.getElementById('badge-version').textContent = 'v' + escapeHtml(h.version);
       const sv = document.getElementById('s-version');
-      if (sv) sv.textContent = h.version;
+      if (sv) sv.textContent = escapeHtml(h.version);
     }
     const actualPort = location.port || (location.protocol === 'https:' ? '443' : '80');
     const serverPort = h.port ? String(h.port) : actualPort;
     ['server-port', 's-port'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.textContent = serverPort;
+      if (el) el.textContent = escapeHtml(serverPort);
     });
   } catch (e) {
     console.error('Init health check failed:', e);
