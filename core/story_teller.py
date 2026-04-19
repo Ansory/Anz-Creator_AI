@@ -27,7 +27,6 @@ LENGTH_PRESETS = {
 }
 
 # Mapping mood UI -> nama file yang mungkin ada di assets/bgm/
-# (key = pilihan UI, value = list kandidat nama file tanpa ekstensi, prioritas urut)
 BGM_MOOD_ALIASES: Dict[str, List[str]] = {
     "epic": ["epic", "cinematic", "action"],
     "sad": ["sad", "dark", "emotional"],
@@ -81,7 +80,6 @@ class StoryTeller:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.work_dir = self.output_dir / ".work"
         self.work_dir.mkdir(exist_ok=True)
-        # FIX: tidak ada hardcoded key — hanya dari parameter atau env
         self.pexels_key = pexels_key or os.getenv("PEXELS_API_KEY", "")
         self.pixabay_key = pixabay_key or os.getenv("PIXABAY_API_KEY", "")
 
@@ -358,11 +356,22 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
             return None
         candidates = BGM_MOOD_ALIASES.get(mood, [mood])
         exts = (".mp3", ".m4a", ".wav", ".ogg")
-        search_dirs: List[Path] = [
-            ROOT / "assets" / "bgm",           # ROOT dari server.py
-            BUNDLE / "assets" / "bgm",         # bundle
-            Path(__file__).resolve().parent.parent / "assets" / "bgm",
-        ]
+        # Cari di beberapa lokasi
+        search_dirs: List[Path] = []
+        # 1. ROOT (tempat user menjalankan app)
+        try:
+            # Import ROOT dari server (tapi karena module independen, kita coba resolve dari __file__)
+            from server import ROOT as SERVER_ROOT
+            search_dirs.append(SERVER_ROOT / "assets" / "bgm")
+        except Exception:
+            pass
+        # 2. Bundle (frozen)
+        if getattr(sys, "frozen", False):
+            search_dirs.append(Path(sys.executable).parent / "assets" / "bgm")
+            if getattr(sys, "_MEIPASS", None):
+                search_dirs.append(Path(sys._MEIPASS) / "assets" / "bgm")
+        # 3. Lokasi relatif terhadap file ini
+        search_dirs.append(Path(__file__).resolve().parent.parent / "assets" / "bgm")
         for base in search_dirs:
             if not base.exists():
                 continue
