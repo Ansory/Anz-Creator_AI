@@ -107,20 +107,18 @@ app.add_middleware(
 @app.middleware("http")
 async def add_csp_header(request, call_next):
     response = await call_next(request)
-    # Terapkan CSP longgar hanya untuk localhost (aplikasi desktop)
-    if request.client and request.client.host == "127.0.0.1":
-        csp = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "font-src 'self' data: https://fonts.gstatic.com; "
-            "img-src 'self' data: https:; "
-            "connect-src 'self' ws: wss: http: https:; "
-            "frame-src 'self' https://www.youtube.com https://youtube.com; "
-            "media-src 'self' blob:; "
-            "worker-src 'self' blob:;"
-        )
-        response.headers["Content-Security-Policy"] = csp
+    # CSP longgar karena aplikasi desktop hanya berjalan lokal
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' ws: wss: http: https:; "
+        "frame-src 'self' https://www.youtube.com https://youtube.com; "
+        "media-src 'self' blob:; "
+        "worker-src 'self' blob:;"
+    )
     return response
 
 
