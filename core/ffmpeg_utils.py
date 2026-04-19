@@ -172,16 +172,20 @@ def extract_frame(src: str | Path, dst: str | Path, at: float = 1.0) -> str:
 
 # -------------------------------------------------------------- Aspect transforms
 def _target_res(aspect: str, quality: str) -> Tuple[int, int]:
-    """Map aspect + quality ke (W, H)."""
+    """Map aspect + quality ke (W, H) — selalu genap."""
     heights = {"1080p": 1080, "720p": 720, "480p": 480}
     h = heights.get(quality, 1080)
     if aspect == "9:16":
-        return int(h * 9 / 16), h
-    if aspect == "16:9":
-        return int(h * 16 / 9), h
-    if aspect == "1:1":
-        return h, h
-    return int(h * 9 / 16), h
+        w = int(h * 9 / 16)
+    elif aspect == "16:9":
+        w = int(h * 16 / 9)
+    elif aspect == "1:1":
+        w = h
+    else:
+        w = int(h * 9 / 16)
+    w = w // 2 * 2
+    h = h // 2 * 2
+    return w, h
 
 
 def _encoder_flags(use_gpu: bool, encoding: str) -> list[str]:
