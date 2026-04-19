@@ -98,7 +98,6 @@ class ShortMaker:
 
     # ------------------------------------------------------- Download
     def _download_youtube(self, url: str, progress_cb=None) -> Path:
-        """Download video pakai yt-dlp. Return path file."""
         try:
             import yt_dlp
         except ImportError as e:
@@ -123,7 +122,6 @@ class ShortMaker:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
-            # pastikan ekstensi .mp4 (merge_output_format)
             p = Path(filename)
             if not p.exists():
                 # coba ganti ekstensi
@@ -191,20 +189,14 @@ PENTING:
 
     # ------------------------------------------------------- Subtitle
     def _generate_srt(self, video_path: Path, srt_path: Path, duration: float) -> None:
-        """
-        Generate SRT placeholder sederhana.
-        Note: untuk transkripsi akurat, idealnya pakai Whisper/Gemini Audio.
-        Versi ini generate placeholder yang bisa di-edit manual user, atau
-        di-upgrade ke Whisper saat library tersedia.
-        """
         # coba pakai Whisper kalau ada
         try:
-            import whisper  # type: ignore
+            import whisper
             model = whisper.load_model("base")
             result = model.transcribe(str(video_path))
             self._write_srt_from_whisper(result, srt_path)
             return
-        except Exception:
+        except (ImportError, Exception):
             pass
 
         # Fallback: satu baris captions
