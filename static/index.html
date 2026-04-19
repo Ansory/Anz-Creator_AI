@@ -2,7 +2,6 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' ws: wss:; frame-src 'self' https://www.youtube.com;">
 <title>Anz-Creator :: AI Content Studio</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -82,7 +81,6 @@
 </head>
 <body>
 
-<!-- Overlay restart/shutdown -->
 <div id="sys-overlay">
   <div class="overlay-icon" id="overlay-icon">⟳</div>
   <div class="overlay-title" id="overlay-title">RESTARTING...</div>
@@ -92,7 +90,6 @@
 
 <div id="app">
 
-  <!-- ============ SIDEBAR ============ -->
   <aside class="sidebar">
     <div class="logo">
       <div class="logo__title">◈ ANZ-CREATOR</div>
@@ -153,14 +150,12 @@
       </div>
     </div>
 
-    <!-- Tombol Restart & Shutdown -->
     <div class="sys-actions">
       <button class="btn-sys btn-sys--restart" id="btn-restart" title="Restart server">⟳ RESTART</button>
       <button class="btn-sys btn-sys--shutdown" id="btn-shutdown" title="Matikan server">⏻ SHUTDOWN</button>
     </div>
   </aside>
 
-  <!-- ============ MAIN ============ -->
   <main class="main">
     <header class="topbar">
       <div class="topbar__title"><span>◈</span><span id="topbar-title">SHORT MAKER</span></div>
@@ -173,7 +168,6 @@
 
     <div class="content">
 
-      <!-- =============== VIEW: SHORT MAKER =============== -->
       <section class="view active" data-view="short-maker">
         <div class="card">
           <div class="card__corners"></div>
@@ -251,7 +245,6 @@
         </div>
       </section>
 
-      <!-- =============== VIEW: STORY TELLER =============== -->
       <section class="view" data-view="story-teller">
         <div class="card">
           <div class="card__corners"></div>
@@ -303,7 +296,6 @@
         </div>
       </section>
 
-      <!-- =============== VIEW: API KEY MANAGER =============== -->
       <section class="view" data-view="api-manager">
         <div class="card">
           <div class="card__corners"></div>
@@ -345,7 +337,6 @@
         </div>
       </section>
 
-      <!-- =============== VIEW: OUTPUTS =============== -->
       <section class="view" data-view="outputs">
         <div class="card">
           <div class="card__corners"></div>
@@ -354,7 +345,6 @@
         </div>
       </section>
 
-      <!-- =============== VIEW: SETTINGS =============== -->
       <section class="view" data-view="settings">
         <div class="card">
           <div class="card__corners"></div>
@@ -390,7 +380,6 @@
     </div>
   </main>
 
-  <!-- ============ RIGHT PANEL ============ -->
   <aside class="right-panel" id="right-panel">
 
     <div class="panel-content" data-panel="short-maker">
