@@ -73,19 +73,5 @@ class GeminiClient:
     def generate_json(self, prompt: str, *, temperature: float = 0.7) -> Any:
         raw = self.generate(prompt, json_mode=True, temperature=temperature)
         cleaned = raw.strip()
-        
-        # FIX: Menggunakan `{3}` agar tidak memicu bug copy-paste Markdown (unterminated string)
-        cleaned = re.sub(r"^`{3}(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*`{3}$", "", cleaned)
-        
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            # Ekstraktor JSON aman untuk mencegah trailing string merusak parser
-            match = re.search(r"(\{.*?\}|\[.*?\])", cleaned, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1))
-                except json.JSONDecodeError:
-                    pass
-            raise RuntimeError(f"Gagal memparsing JSON dari response: {cleaned}")
+        cleaned = re.sub(r"^
+http://googleusercontent.com/immersive_entry_chip/0
