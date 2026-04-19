@@ -70,6 +70,9 @@ class GeminiClient:
                 msg = str(e).lower()
                 if "quota" in msg or "429" in msg or "rate" in msg or "exhaust" in msg:
                     self.rotator.mark_quota_exceeded(key)
+                elif "api key" in msg or "invalid" in msg or "permission" in msg or "401" in msg or "403" in msg:
+                    self.rotator.mark_invalid(key)
+                else:
                     continue
                 if "api key" in msg or "invalid" in msg or "permission" in msg or "401" in msg or "403" in msg:
                     self.rotator.mark_invalid(key)
