@@ -193,7 +193,6 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
     @staticmethod
     def _escape_drawtext(text: str) -> str:
         """Escape karakter khusus untuk ffmpeg drawtext filter."""
-        # Urutan penting: backslash dulu, baru yang lain
         return (
             text.replace("\\", "\\\\")
             .replace(":", "\\:")
@@ -358,10 +357,10 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
         if not mood or mood == "none":
             return None
         candidates = BGM_MOOD_ALIASES.get(mood, [mood])
-        # fallback: cari ekstensi .mp3 / .m4a / .wav
         exts = (".mp3", ".m4a", ".wav", ".ogg")
         search_dirs: List[Path] = [
-            Path("assets") / "bgm",
+            ROOT / "assets" / "bgm",           # ROOT dari server.py
+            BUNDLE / "assets" / "bgm",         # bundle
             Path(__file__).resolve().parent.parent / "assets" / "bgm",
         ]
         for base in search_dirs:
