@@ -360,6 +360,7 @@ def short_maker_find_viral(body: FindViralBody):
 
 @app.post("/api/short-maker/start")
 async def short_maker_start(body: ShortMakerBody):
+    _ensure_keys_available()
     jid = _new_job()
 
     async def run():
@@ -419,6 +420,7 @@ def story_preview(body: StoryTellerBody):
 
 @app.post("/api/story-teller/start")
 async def story_start(body: StoryTellerBody):
+    _ensure_keys_available()
     jid = _new_job()
 
     async def run():
