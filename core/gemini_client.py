@@ -16,7 +16,7 @@ from .api_rotator import APIKeyRotator, AllKeysExhaustedError
 
 class GeminiClient:
     # Gunakan model yang tersedia di free tier Gemini.
-    MODEL_TEXT = "gemini-1.5-flash"
+    MODEL_TEXT = "gemini-3.1-flash-lite-preview"
     MAX_RETRIES_PER_CALL = 10  # max swap key sebelum menyerah
     MAX_OUTPUT_TOKENS = 8192
 
