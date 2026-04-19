@@ -159,7 +159,6 @@ class StoryTeller:
     def _find_bgm(self, mood: str) -> Optional[Path]:
         if not mood or mood == "none": return None
         candidates = BGM_MOOD_ALIASES.get(mood, [mood])
-        # PENGHAPUSAN CIRCULAR IMPORT DARI server.py DI SINI
         search_dirs = [Path(__file__).resolve().parent.parent / "assets" / "bgm"]
         if getattr(sys, "frozen", False):
             search_dirs.extend([Path(sys.executable).parent / "assets" / "bgm", Path(sys._MEIPASS) / "assets" / "bgm" if getattr(sys, "_MEIPASS", None) else None])
@@ -169,3 +168,7 @@ class StoryTeller:
                     for ext in (".mp3", ".m4a", ".wav"):
                         if (base / f"{name}{ext}").exists(): return base / f"{name}{ext}"
         return None
+
+    def preview_script(self, opts: StoryTellerOptions) -> List[Dict]:
+        scenes = self._generate_script(opts)
+        return [{"text": sc.text, "keyword": sc.keyword} for sc in scenes]
