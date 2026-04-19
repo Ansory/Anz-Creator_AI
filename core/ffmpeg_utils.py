@@ -276,12 +276,17 @@ def _escape_ffmpeg_filter_path(p: str | Path) -> str:
 
 def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
                    use_gpu: bool = False, encoding: str = "balanced") -> str:
-    """Burn SRT subtitle ke video."""
+    """Burn SRT subtitle ke video dengan style ala TikTok/Reels."""
     srt_escaped = _escape_ffmpeg_filter_path(srt_path)
+    
+    # PERBAIKAN: 
+    # - BorderStyle=1 (Outline/Shadow, bukan kotak hitam)
+    # - Bold=1 & FontSize disesuaikan agar proporsional
+    # - MarginV=50 agar tidak terlalu menempel ke bawah layar
     vf = (
-        f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=22,"
-        f"PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,"
-        f"BorderStyle=3,Outline=2,Shadow=0,Alignment=2'"
+        f"subtitles='{srt_escaped}':force_style='FontName=Arial,Bold=1,FontSize=16,"
+        f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+        f"BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV=50'"
     )
     args = ["-i", str(src), "-vf", vf]
     args += _encoder_flags(use_gpu, encoding)
