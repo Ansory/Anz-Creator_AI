@@ -11,10 +11,8 @@ Alur utama:
 """
 from __future__ import annotations
 
-import json
 import re
-import subprocess
-import time
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +21,19 @@ from typing import Dict, List, Optional
 from . import ffmpeg_utils as ff
 from .api_rotator import APIKeyRotator
 from .gemini_client import GeminiClient
+
+
+# Karakter yang ilegal sebagai nama file di Windows.
+_WINDOWS_BAD = r'<>:"/\|?*'
+
+
+def _safe_filename(name: str, max_len: int = 50, fallback: str = "clip") -> str:
+    """Sanitasi nama file untuk Windows & Linux."""
+    cleaned = "".join("_" if c in _WINDOWS_BAD else c for c in name)
+    cleaned = re.sub(r"[\x00-\x1f]", "", cleaned)
+    cleaned = re.sub(r"\s+", "_", cleaned).strip("._ ")
+    cleaned = cleaned[:max_len].rstrip("._ ")
+    return cleaned or fallback
 
 
 # -------------------------------------------------------------- Topik config
@@ -197,13 +208,16 @@ PENTING:
             pass
 
         # Fallback: satu baris captions
+        h = int(duration // 3600)
+        m = int((duration % 3600) // 60)
+        s = duration % 60
+        end_ts = f"{h:02d}:{m:02d}:{s:06.3f}".replace(".", ",")
         with open(srt_path, "w", encoding="utf-8") as f:
-            f.write("1\n00:00:00,000 --> ")
-            h = int(duration // 3600)
-            m = int((duration % 3600) // 60)
-            s = duration % 60
-            f.write(f"{h:02d}:{m:02d}:{s:06.3f}\n".replace(".", ","))
-            f.write("[ Aktifkan subtitle via transkripsi Whisper untuk hasil terbaik ]\n\n")
+            f.write(
+                "1\n"
+                f"00:00:00,000 --> {end_ts}\n"
+                "[ Aktifkan subtitle via transkripsi Whisper untuk hasil terbaik ]\n\n"
+            )
 
     def _write_srt_from_whisper(self, result: dict, srt_path: Path) -> None:
         def ts(t: float) -> str:
@@ -292,17 +306,20 @@ PENTING:
             final_src = transformed_path
 
         # 6. Pindah ke output dir
-        safe_title = re.sub(r"[^\w\s-]", "", metadata.get("title", "clip"))[:50].strip().replace(" ", "_")
-        final_name = f"{safe_title or 'clip'}_{job_id}.mp4"
+        safe_title = _safe_filename(metadata.get("title", "clip"))
+        final_name = f"{safe_title}_{job_id}.mp4"
         final_path = self.output_dir / final_name
-        final_src.rename(final_path)
+        # shutil.move aman untuk cross-drive & akan replace existing di Windows
+        if final_path.exists():
+            final_path.unlink()
+        shutil.move(str(final_src), str(final_path))
 
         # 7. Thumbnail
-        thumb_path = self.output_dir / f"{final_path.stem}_thumb.jpg"
+        thumb_path: Optional[Path] = self.output_dir / f"{final_path.stem}_thumb.jpg"
         try:
             ff.extract_frame(final_path, thumb_path, at=0.5)
         except Exception:
-            thumb_path = Path()
+            thumb_path = None
 
         # cleanup work files
         for p in self.work_dir.glob(f"*_{job_id}.*"):
@@ -310,7 +327,7 @@ PENTING:
 
         return ShortMakerResult(
             output_path=str(final_path),
-            thumbnail_path=str(thumb_path) if thumb_path else "",
+            thumbnail_path=str(thumb_path) if thumb_path and thumb_path.exists() else "",
             title=metadata.get("title", "Untitled"),
             description=metadata.get("description", ""),
             tags=metadata.get("tags", []),

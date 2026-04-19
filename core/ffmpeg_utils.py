@@ -5,36 +5,101 @@ Semua fungsi di sini menerima path file & return path hasil.
 from __future__ import annotations
 
 import json
-import shlex
+import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
 
 # -------------------------------------------------------------- Binary lookup
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def _candidates(name: str) -> list[Path]:
+    """
+    Kumpulkan kandidat path untuk binary ffmpeg/ffprobe.
+    Urutan: env var → sebelah .exe → PyInstaller bundle (_MEIPASS) →
+            folder bin/ di project → PATH.
+    """
+    exe = f"{name}.exe" if _is_windows() else name
+    out: list[Path] = []
+
+    # 1. env var (FFMPEG_BIN / FFPROBE_BIN)
+    env_key = f"{name.upper()}_BIN"
+    ev = os.getenv(env_key)
+    if ev:
+        out.append(Path(ev))
+
+    # 2. Sebelah .exe (frozen mode)
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).parent
+        out.append(exe_dir / exe)
+        out.append(exe_dir / "bin" / exe)
+
+    # 3. PyInstaller bundle dir (_MEIPASS)
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        out.append(Path(meipass) / exe)
+        out.append(Path(meipass) / "bin" / exe)
+
+    # 4. Folder bin/ di project root
+    project_root = Path(__file__).resolve().parent.parent
+    out.append(project_root / "bin" / exe)
+    out.append(project_root / exe)
+
+    return out
+
+
+def _resolve_binary(name: str) -> str:
+    # Cek kandidat di atas dulu
+    for p in _candidates(name):
+        try:
+            if p and p.is_file():
+                return str(p)
+        except OSError:
+            continue
+    # Fallback ke PATH
+    which = shutil.which(name)
+    if which:
+        return which
+    raise RuntimeError(
+        f"{name} tidak ditemukan. Install FFmpeg dari https://ffmpeg.org/download.html, "
+        f"taruh di folder `bin/`, atau set env var {name.upper()}_BIN di .env."
+    )
+
+
 def ffmpeg_bin() -> str:
-    path = shutil.which("ffmpeg")
-    if not path:
-        raise RuntimeError(
-            "FFmpeg tidak ditemukan di PATH. Install FFmpeg dari https://ffmpeg.org/download.html "
-            "atau bundle bersama .exe di folder /bin."
-        )
-    return path
+    return _resolve_binary("ffmpeg")
 
 
 def ffprobe_bin() -> str:
-    path = shutil.which("ffprobe")
-    if not path:
-        raise RuntimeError("ffprobe tidak ditemukan di PATH.")
-    return path
+    return _resolve_binary("ffprobe")
+
+
+def _no_console_flags() -> dict:
+    """Di Windows, sembunyikan console popup saat spawn subprocess."""
+    if _is_windows():
+        return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)}
+    return {}
 
 
 # -------------------------------------------------------------- Low-level runners
 def run_ffmpeg(args: list[str], *, timeout: Optional[int] = None) -> subprocess.CompletedProcess:
     cmd = [ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error", *args]
     try:
-        return subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            encoding="utf-8",
+            errors="replace",
+            **_no_console_flags(),
+        )
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"FFmpeg gagal: {e.stderr or e.stdout}") from e
 
@@ -45,7 +110,15 @@ def probe(path: str | Path) -> dict:
         ffprobe_bin(), "-v", "quiet", "-print_format", "json",
         "-show_format", "-show_streams", str(path),
     ]
-    out = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    out = subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        **_no_console_flags(),
+    )
     return json.loads(out.stdout)
 
 
@@ -182,11 +255,27 @@ def transform_aspect(
 
 
 # -------------------------------------------------------------- Subtitle burn
+def _escape_subtitle_path(p: str | Path) -> str:
+    """
+    Escape path untuk filter 'subtitles=' di Windows/Unix.
+    Windows: ubah \\ jadi /, escape ':' setelah drive letter.
+    """
+    s = str(p).replace("\\", "/")
+    # Escape backslash (kalau ada sisa), apostrof, dan colon (drive letter)
+    s = s.replace(":", "\\:")
+    s = s.replace("'", "\\'")
+    return s
+
+
 def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
                    use_gpu: bool = False, encoding: str = "balanced") -> str:
     """Burn SRT subtitle ke video. Path SRT perlu di-escape untuk filter graph."""
-    srt_escaped = str(srt_path).replace("\\", "/").replace(":", "\\:")
-    vf = f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BorderStyle=3,Outline=2,Shadow=0,Alignment=2'"
+    srt_escaped = _escape_subtitle_path(srt_path)
+    vf = (
+        f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=22,"
+        f"PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,"
+        f"BorderStyle=3,Outline=2,Shadow=0,Alignment=2'"
+    )
     args = ["-i", str(src), "-vf", vf]
     args += _encoder_flags(use_gpu, encoding)
     args += ["-c:a", "copy", str(dst)]
