@@ -587,33 +587,89 @@ async function loadOutputs() {
     </div>`).join('');
 }
 
+/* -------------------- Restart/Shutdown Handlers -------------------- */
+const overlay = document.getElementById('sys-overlay');
+const overlayIcon = document.getElementById('overlay-icon');
+const overlayTitle = document.getElementById('overlay-title');
+const overlayMsg = document.getElementById('overlay-msg');
+const overlaySpinner = document.getElementById('overlay-spinner');
+
+function showOverlay(mode) {
+  if (mode === 'restart') {
+    overlayIcon.textContent = '⟳';
+    overlayTitle.textContent = 'RESTARTING...';
+    overlayMsg.textContent = 'Menunggu server kembali online...';
+    overlaySpinner.style.display = 'block';
+  } else {
+    overlayIcon.textContent = '⏻';
+    overlayTitle.textContent = 'SERVER OFF';
+    overlayMsg.textContent = 'Server telah dimatikan. Tutup tab ini atau jalankan ulang manual.';
+    overlaySpinner.style.display = 'none';
+  }
+  overlay.classList.add('show');
+}
+
+async function doRestart() {
+  if (!confirm('Restart server sekarang?')) return;
+  showOverlay('restart');
+  try {
+    await API.restart();
+  } catch (_) {}
+  let attempts = 0;
+  const poll = setInterval(async () => {
+    attempts++;
+    try {
+      const r = await fetch('/api/health');
+      if (r.ok) {
+        clearInterval(poll);
+        overlay.classList.remove('show');
+        toast('✓ Server berhasil restart', 'ok');
+        loadKeys();
+      }
+    } catch (_) {}
+    if (attempts > 40) {
+      clearInterval(poll);
+      overlayMsg.textContent = 'Server tidak merespons. Coba refresh halaman manual.';
+    }
+  }, 1000);
+}
+
+async function doShutdown() {
+  if (!confirm('Matikan server? Kamu perlu jalankan ulang manual dari terminal.')) return;
+  try {
+    await API.shutdown();
+  } catch (_) {}
+  showOverlay('shutdown');
+}
+
+// Bind restart/shutdown buttons
+['btn-restart', 'settings-restart', 'rp-restart'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', doRestart);
+});
+['btn-shutdown', 'settings-shutdown', 'rp-shutdown'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', doShutdown);
+});
+
 /* -------------------- INIT -------------------- */
 (async function init() {
   try {
-    // Ambil health dari server — sinkronkan port, versi di UI
     const h = await API.health();
-
-    // Sinkron versi
     if (h.version) {
       document.getElementById('badge-version').textContent = 'v' + h.version;
       const sv = document.getElementById('s-version');
       if (sv) sv.textContent = h.version;
     }
-
-    // Sinkron port — ambil dari URL browser (paling akurat) + server
     const actualPort = location.port || (location.protocol === 'https:' ? '443' : '80');
     const serverPort = h.port ? String(h.port) : actualPort;
-
-    // Update semua elemen yang menampilkan port
     ['server-port', 's-port'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.textContent = serverPort;
     });
-
   } catch (e) {
     console.error('Init health check failed:', e);
   }
-
   try {
     await loadKeys();
   } catch (e) {
