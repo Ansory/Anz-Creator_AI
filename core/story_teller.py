@@ -206,34 +206,42 @@ HANYA JSON, tanpa teks lain. Jangan pakai emoji di text."""
         dur = scene.duration
 
         if scene.footage_path and Path(scene.footage_path).exists():
-            # PERBAIKAN: Hapus filter 'zoompan' yang membuat video Pexels membeku.
-            # Cukup gunakan scale & crop agar video asli tetap bergerak natural.
-            vf = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}"
+            # FIX 1: fps=30 mutlak diperlukan agar proses gabung (concat) tidak patah-patah
+            vf = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps=30"
             
             ff.run_ffmpeg([
                 "-stream_loop", "-1",
-                "-i", str(scene.footage_path),
-                "-i", str(scene.audio_path),
+                "-i", str(scene.footage_path),   # Input 0: Video Pexels
+                "-i", str(scene.audio_path),     # Input 1: Audio Narasi (TTS)
                 "-t", f"{dur:.2f}",
                 "-vf", vf,
+                # FIX 2: Explicit Mapping! 
+                # Paksa ambil Video dari Input 0, dan Audio HANYA dari Input 1
+                "-map", "0:v:0", 
+                "-map", "1:a:0",
                 "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-                "-c:a", "aac", "-pix_fmt", "yuv420p",
+                # FIX 3: Normalisasi Audio (Stereo & Sample Rate seragam)
+                "-c:a", "aac", "-ar", "44100", "-ac", "2", 
+                "-pix_fmt", "yuv420p",
                 "-shortest",
                 str(out),
             ])
         else:
-            # Fallback jika tidak ada footage internet
+            # Fallback jika gagal download footage
             safe_text = self._escape_drawtext(scene.text[:60])
             ff.run_ffmpeg([
                 "-f", "lavfi",
-                "-i", f"color=c=0x06080f:s={W}x{H}:d={dur:.2f}",
+                "-i", f"color=c=0x06080f:s={W}x{H}:d={dur:.2f}:r=30", # Force 30 fps
                 "-i", str(scene.audio_path),
                 "-vf",
                 f"drawtext=text='{safe_text}':fontcolor=white:fontsize=36:"
-                f"x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=6",
+                f"x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=6,fps=30",
                 "-t", f"{dur:.2f}",
+                "-map", "0:v:0",
+                "-map", "1:a:0",
                 "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-                "-c:a", "aac", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-ar", "44100", "-ac", "2",
+                "-pix_fmt", "yuv420p",
                 "-shortest",
                 str(out),
             ])
