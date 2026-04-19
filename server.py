@@ -104,18 +104,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Middleware CSP (longgar untuk localhost)
 @app.middleware("http")
 async def add_csp_header(request, call_next):
     response = await call_next(request)
-    # Izinkan eval hanya untuk localhost
+    # Izinkan eval dan font eksternal hanya untuk localhost
     if request.client and request.client.host == "127.0.0.1":
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; "
-            "style-src 'self' 'unsafe-inline' https:; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: https:; "
-            "connect-src 'self' ws: wss:;"
+            "connect-src 'self' ws: wss:; "
+            "frame-src 'self' https://www.youtube.com;"  # untuk embed YouTube
         )
     return response
 
