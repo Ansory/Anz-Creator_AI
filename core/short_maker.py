@@ -97,8 +97,7 @@ class ShortMaker:
         self.work_dir.mkdir(exist_ok=True)
 
     # ------------------------------------------------------- Download
-    def _download_youtube(self, url: str, progress_cb=None) -> Path:
-        """Download video pakai yt-dlp. Return path file."""
+        def _download_youtube(self, url: str, progress_cb=None) -> Path:
         try:
             import yt_dlp
         except ImportError as e:
@@ -106,6 +105,11 @@ class ShortMaker:
 
         job_id = uuid.uuid4().hex[:8]
         out_template = str(self.work_dir / f"yt_{job_id}.%(ext)s")
+
+        # Dapatkan lokasi ffmpeg dari helper kita
+        from . import ffmpeg_utils as ff
+        ffmpeg_path = ff.ffmpeg_bin()
+        ffmpeg_dir = str(Path(ffmpeg_path).parent)
 
         def hook(d):
             if progress_cb and d.get("status") == "downloading":
@@ -119,13 +123,13 @@ class ShortMaker:
             "quiet": True,
             "no_warnings": True,
             "progress_hooks": [hook] if progress_cb else [],
+            "ffmpeg_location": ffmpeg_dir,   # <-- TAMBAHKAN BARIS INI
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             p = Path(filename)
             if not p.exists():
-                # coba ganti ekstensi
                 for ext in (".mp4", ".mkv", ".webm"):
                     alt = p.with_suffix(ext)
                     if alt.exists():
