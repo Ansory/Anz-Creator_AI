@@ -3,10 +3,18 @@ uvicorn[standard]==0.27.0
 python-multipart==0.0.9
 python-dotenv==1.0.0
 pydantic>=2.5.0,<3.0.0
-requests==2.31.0
+requests==2.32.2
 psutil==5.9.8
 yt-dlp>=2024.4.9
 google-generativeai==0.5.4
 gTTS==2.5.1
 pyinstaller==6.4.0
 openai-whisper; sys_platform == 'win32' or sys_platform == 'linux'
+transformers>=4.36.0 # not directly required, pinned by Snyk to avoid a vulnerability
+torch>=2.2.0 # not directly required, pinned by Snyk to avoid a vulnerability
+urllib3>=1.26.19 # not directly required, pinned by Snyk to avoid a vulnerability
+setuptools>=65.5.1 # not directly required, pinned by Snyk to avoid a vulnerability
+wheel>=0.38.0 # not directly required, pinned by Snyk to avoid a vulnerability
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
+filelock>=3.20.1 # not directly required, pinned by Snyk to avoid a vulnerability
+numpy>=1.22.0 # not directly required, pinned by Snyk to avoid a vulnerability
