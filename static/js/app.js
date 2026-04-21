@@ -63,7 +63,7 @@ const API = {
 function toast(msg, type = 'ok') {
   const container = document.getElementById('toasts');
   const el = document.createElement('div');
-  el.className = `toast ${type === 'err' ? 'err' : type === 'ok' ? 'ok' : ''}`;
+  el.className = `toast ${type === 'err' ? 'err' : type === 'ok' ? 'ok' : type === 'warn' ? 'warn' : ''}`;
   el.textContent = msg;
   container.appendChild(el);
   setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(100%)'; }, 3500);
@@ -302,7 +302,7 @@ document.getElementById('sm-find-viral').addEventListener('click', async () => {
     const r = await API.smFindViral({
       source, source_type: sourceType,
       topic: document.getElementById('sm-topic').value,
-      language: 'id',
+      language: segValue('sm-language') || 'id',
     });
     
     if (!r.ok) {
@@ -372,6 +372,10 @@ document.getElementById('sm-start').addEventListener('click', async () => {
   if (!source) return toast('Masukkan URL atau upload file', 'err');
   
   const durPreset = document.getElementById('sm-duration').value;
+  const customEnd = durPreset === 'custom' ? parseTime(document.getElementById('sm-end').value) : 0;
+  if (durPreset === 'custom' && customEnd === 0) {
+    toast('⚠ Waktu selesai kosong — otomatis pakai start + 60 detik', 'warn');
+  }
   const body = {
     source, source_type: sourceType,
     transform_mode: document.getElementById('sm-mode').value,
@@ -381,11 +385,11 @@ document.getElementById('sm-start').addEventListener('click', async () => {
     topic: document.getElementById('sm-topic').value,
     duration_preset: durPreset,
     custom_start: durPreset === 'custom' ? parseTime(document.getElementById('sm-start').value) : 0,
-    custom_end: durPreset === 'custom' ? parseTime(document.getElementById('sm-end').value) : 0,
+    custom_end: customEnd,
     encoding: segValue('sm-encoding'),
     use_gpu: document.getElementById('sm-gpu').checked,
     bypass_copyright: document.getElementById('sm-bypass').checked,
-    language: 'id',
+    language: segValue('sm-language') || 'id',
   };
   
   const btn = document.getElementById('sm-start');
@@ -407,9 +411,13 @@ document.getElementById('sm-start').addEventListener('click', async () => {
 
 function renderShortResult(result) {
   const tagsHtml = (result.tags||[]).map(t => `<span class="tag-chip">#${escapeHtml(t)}</span>`).join('');
+  const captionWarn = (result.caption_applied === false)
+    ? `<div style="color:var(--amber);font-size:12px;margin-bottom:8px">⚠ Caption gagal diburn — video tanpa subtitle</div>`
+    : '';
   document.getElementById('sm-result').innerHTML = `
     <div class="result-card">
       <h3>✓ CONVERSION COMPLETE</h3>
+      ${captionWarn}
       <video src="${escapeHtml(result.output_url)}" controls style="width:100%;max-height:300px;border:1px solid var(--border-glow)"></video>
       <div class="divider"></div>
       <div class="meta-row"><span class="meta-row__label">JUDUL</span><span class="meta-row__value">${escapeHtml(result.title)}</span></div>

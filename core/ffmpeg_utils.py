@@ -246,7 +246,7 @@ def transform_aspect(
     af_parts = []
     if bypass_copyright:
         vf = f"{vf},eq=contrast=1.03:saturation=1.05:brightness=0.02,setpts=PTS/1.02"
-        af_parts.append("asetrate=44100*1.02,aresample=44100,atempo=1/1.02*1.02")
+        af_parts.append("asetrate=44100*1.02,aresample=44100,atempo=0.9804")
 
     args = ["-i", str(src), "-vf", vf]
     if af_parts:
@@ -278,15 +278,13 @@ def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
                    use_gpu: bool = False, encoding: str = "balanced") -> str:
     """Burn SRT subtitle ke video dengan style ala TikTok/Reels."""
     srt_escaped = _escape_ffmpeg_filter_path(srt_path)
-    
-    # PERBAIKAN: 
-    # - BorderStyle=1 (Outline/Shadow, bukan kotak hitam)
-    # - Bold=1 & FontSize disesuaikan agar proporsional
-    # - MarginV=50 agar tidak terlalu menempel ke bawah layar
+    _, h = get_video_size(src)
+    font_size = max(14, int((h or 1080) * 0.045))
+    margin_v = max(20, int((h or 1080) * 0.046))
     vf = (
-        f"subtitles='{srt_escaped}':force_style='FontName=Arial,Bold=1,FontSize=16,"
+        f"subtitles='{srt_escaped}':force_style='FontName=Arial,Bold=1,FontSize={font_size},"
         f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-        f"BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV=50'"
+        f"BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV={margin_v}'"
     )
     args = ["-i", str(src), "-vf", vf]
     args += _encoder_flags(use_gpu, encoding)

@@ -84,6 +84,7 @@ class ShortMakerResult:
     duration: float = 0.0
     start_seconds: float = 0.0
     end_seconds: float = 0.0
+    caption_applied: bool = True
 
 
 # -------------------------------------------------------------- Main class
@@ -295,6 +296,7 @@ PENTING:
         )
 
         # 5. Subtitle (opsional)
+        caption_applied = False
         if opts.caption_ai:
             log("Generate subtitle...")
             srt_path = self.work_dir / f"sub_{job_id}.srt"
@@ -304,8 +306,9 @@ PENTING:
                 ff.burn_subtitles(transformed_path, captioned_path, srt_path,
                                   use_gpu=opts.use_gpu, encoding=opts.encoding)
                 final_src = captioned_path
+                caption_applied = True
             except Exception as e:  # noqa: BLE001
-                log(f"Subtitle gagal, lanjut tanpa subtitle: {e}")
+                log(f"[WARN] Subtitle gagal diburn, video tetap diproses tanpa caption: {e}")
                 final_src = transformed_path
         else:
             final_src = transformed_path
@@ -339,6 +342,7 @@ PENTING:
             duration=end - start,
             start_seconds=start,
             end_seconds=end,
+            caption_applied=caption_applied,
         )
 
     # ------------------------------------------------------- AI Find Viral
@@ -375,4 +379,7 @@ Output JSON strict ({lang_label}):
 }}
 
 HANYA JSON, tanpa teks lain."""
-        return self.gemini.generate_json(prompt)
+        try:
+            return self.gemini.generate_json(prompt)
+        except Exception as e:  # noqa: BLE001
+            return {"moments": [], "error": str(e)}

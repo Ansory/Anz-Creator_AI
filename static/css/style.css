@@ -1018,6 +1018,7 @@ body::after {
 
 .toast.err { border-color: var(--pink); box-shadow: 0 0 16px rgba(255,0,110,0.25); }
 .toast.ok { border-color: var(--green); box-shadow: 0 0 16px rgba(0,255,136,0.25); }
+.toast.warn { border-color: var(--amber); box-shadow: 0 0 16px rgba(255,180,0,0.25); }
 
 @keyframes toast-in {
   from { transform: translateX(100%); opacity: 0; }
