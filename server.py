@@ -383,6 +383,7 @@ async def short_maker_start(body: ShortMakerBody):
                 "duration": result.duration,
                 "start_seconds": result.start_seconds,
                 "end_seconds": result.end_seconds,
+                "caption_applied": result.caption_applied,
             }
             JOBS[jid]["status"] = "done"
         except Exception as e:
