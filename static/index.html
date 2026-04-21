@@ -104,10 +104,6 @@
           <span class="nav-item__icon">✂</span>
           <span>Short Maker</span>
         </div>
-        <div class="nav-item" data-view="story-teller">
-          <span class="nav-item__icon">✦</span>
-          <span>Text to Story</span>
-        </div>
       </div>
 
       <div class="nav-section">
@@ -245,57 +241,6 @@
         </div>
       </section>
 
-      <section class="view" data-view="story-teller">
-        <div class="card">
-          <div class="card__corners"></div>
-          <div class="card__title">STORY INPUT</div>
-          <div class="field">
-            <label class="field__label">Judul / Topik Cerita</label>
-            <input class="input" id="st-title" placeholder="Misal: Kisah pengusaha muda yang bangkit dari kegagalan" />
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label class="field__label">Genre</label>
-              <select class="select" id="st-genre">
-                <option>Drama</option><option>Romance</option><option>Thriller</option>
-                <option>Motivasi</option><option>Horor</option><option>Edukasi</option><option>Komedi</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="field__label">Gaya Narasi</label>
-              <select class="select" id="st-style">
-                <option>Dramatis</option><option>Formal</option><option>Santai</option><option>Puitis</option>
-              </select>
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label class="field__label">Panjang Cerita</label>
-              <select class="select" id="st-length">
-                <option value="short">Short (~1 menit)</option>
-                <option value="medium" selected>Medium (~3 menit)</option>
-                <option value="long">Long (~5 menit)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="field__label">Bahasa</label>
-              <select class="select" id="st-language">
-                <option value="id">Indonesia</option>
-                <option value="en">English</option>
-              </select>
-            </div>
-          </div>
-          <div class="flex gap-2 mt-2">
-            <button class="btn" id="st-preview">◎ Preview Naskah</button>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card__corners"></div>
-          <div class="card__title">NASKAH PREVIEW</div>
-          <div id="st-script-list" class="empty-state">Klik "Preview Naskah" untuk melihat draf cerita</div>
-        </div>
-      </section>
-
       <section class="view" data-view="api-manager">
         <div class="card">
           <div class="card__corners"></div>
@@ -357,18 +302,6 @@
             <button class="btn" id="settings-restart" style="color:var(--amber);border-color:var(--amber)">⟳ RESTART SERVER</button>
             <button class="btn btn--danger" id="settings-shutdown">⏻ SHUTDOWN SERVER</button>
           </div>
-        </div>
-        <div class="card">
-          <div class="card__corners"></div>
-          <div class="card__title">EXTERNAL APIS</div>
-          <div class="text-sm text-muted">
-            Pexels &amp; Pixabay API key dibaca dari file <code>.env</code>.
-            Edit <code>.env</code> lalu restart server.
-          </div>
-          <div class="divider"></div>
-          <div class="meta-row"><span class="meta-row__label">GEMINI</span><span class="meta-row__value">via API Key Manager</span></div>
-          <div class="meta-row"><span class="meta-row__label">PEXELS</span><span class="meta-row__value" id="env-pexels">—</span></div>
-          <div class="meta-row"><span class="meta-row__label">PIXABAY</span><span class="meta-row__value" id="env-pixabay">—</span></div>
         </div>
         <div class="card">
           <div class="card__corners"></div>
@@ -449,73 +382,6 @@
         <div class="log-panel" id="sm-log"></div>
       </div>
       <div id="sm-result"></div>
-    </div>
-
-    <div class="panel-content hidden" data-panel="story-teller">
-      <div class="card">
-        <div class="card__corners"></div>
-        <div class="card__title">VIDEO FORMAT</div>
-        <div class="field">
-          <label class="field__label">Aspect</label>
-          <div class="seg" id="st-aspect">
-            <div class="seg__item active" data-v="9:16">9:16</div>
-            <div class="seg__item" data-v="16:9">16:9</div>
-            <div class="seg__item" data-v="1:1">1:1</div>
-          </div>
-        </div>
-        <div class="field">
-          <label class="field__label">Kualitas</label>
-          <div class="seg" id="st-quality">
-            <div class="seg__item active" data-v="1080p">1080P</div>
-            <div class="seg__item" data-v="720p">720P</div>
-            <div class="seg__item" data-v="480p">480P</div>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card__corners"></div>
-        <div class="card__title">NARASI TTS</div>
-        <div class="field">
-          <label class="field__label">Voice</label>
-          <div class="seg" id="st-voice">
-            <div class="seg__item active" data-v="female">FEMALE</div>
-            <div class="seg__item" data-v="male">MALE</div>
-          </div>
-        </div>
-        <div class="field">
-          <label class="field__label">Kecepatan</label>
-          <div class="seg" id="st-speed">
-            <div class="seg__item" data-v="slow">SLOW</div>
-            <div class="seg__item active" data-v="normal">NORMAL</div>
-            <div class="seg__item" data-v="fast">FAST</div>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card__corners"></div>
-        <div class="card__title">BACKGROUND MUSIC</div>
-        <div class="field">
-          <select class="select" id="st-bgm">
-            <option value="epic">🎵 Epic</option>
-            <option value="sad">😢 Sad</option>
-            <option value="calm">🌿 Calm</option>
-            <option value="upbeat">⚡ Upbeat</option>
-            <option value="none">❌ Tanpa BGM</option>
-          </select>
-        </div>
-        <label class="check">
-          <input type="checkbox" id="st-footage" checked>
-          <span class="check__box"></span>
-          <span>Gunakan Footage (Pexels/Pixabay)</span>
-        </label>
-      </div>
-      <button class="btn-hero" id="st-start">◈ GENERATE STORY VIDEO ◈</button>
-      <div class="card mt-3">
-        <div class="card__corners"></div>
-        <div class="card__title">PROGRESS LOG</div>
-        <div class="log-panel" id="st-log"></div>
-      </div>
-      <div id="st-result"></div>
     </div>
 
     <div class="panel-content hidden" data-panel="api-manager">

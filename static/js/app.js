@@ -48,16 +48,6 @@ const API = {
     body: JSON.stringify(body),
   }).then(r => r.json()),
 
-  // Story Teller
-  stPreview: (body) => fetch('/api/story-teller/preview', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body),
-  }),
-  stStart: (body) => fetch('/api/story-teller/start', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body),
-  }).then(r => r.json()),
-
   // Job
   jobStatus: (jid) => fetch(`/api/job/${jid}`).then(r => r.json()),
 
@@ -113,7 +103,6 @@ function renderError(container, err) {
 /* -------------------- Nav -------------------- */
 const NAV_TITLES = {
   'short-maker': 'SHORT MAKER',
-  'story-teller': 'TEXT TO STORY TELLING',
   'api-manager': 'API KEY MANAGER',
   'outputs': 'GENERATED OUTPUTS',
   'settings': 'SETTINGS',
@@ -429,97 +418,6 @@ function renderShortResult(result) {
       <div class="meta-row"><span class="meta-row__label">DESKRIPSI</span><span class="meta-row__value">${escapeHtml(result.description)}</span></div>
       <div class="meta-row"><span class="meta-row__label">TAGS</span><span class="meta-row__value">${tagsHtml}</span></div>
       ${result.pinned_comment ? `<div class="meta-row"><span class="meta-row__label">PIN COMMENT</span><span class="meta-row__value">${escapeHtml(result.pinned_comment)}</span></div>` : ''}
-      <div class="divider"></div>
-      <a class="btn" href="${escapeHtml(result.output_url)}" download>⤓ DOWNLOAD VIDEO</a>
-    </div>`;
-}
-
-/* -------------------- STORY TELLER -------------------- */
-function collectStoryOpts() {
-  return {
-    title: document.getElementById('st-title').value.trim(),
-    genre: document.getElementById('st-genre').value,
-    style: document.getElementById('st-style').value,
-    length: document.getElementById('st-length').value,
-    language: document.getElementById('st-language').value,
-    tts_voice: segValue('st-voice'),
-    tts_speed: segValue('st-speed'),
-    bgm_mood: document.getElementById('st-bgm').value,
-    aspect: segValue('st-aspect'),
-    quality: segValue('st-quality'),
-    use_footage: document.getElementById('st-footage').checked,
-  };
-}
-
-document.getElementById('st-preview').addEventListener('click', async () => {
-  const opts = collectStoryOpts();
-  if (!opts.title) return toast('Isi judul/topik dulu', 'err');
-  
-  const btn = document.getElementById('st-preview');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span> Generating...';
-  document.getElementById('st-script-list').innerHTML = '<div class="text-sm text-muted">AI sedang menulis naskah...</div>';
-  
-  try {
-    const r = await API.stPreview(opts);
-    if (!r.ok) {
-      const err = await parseApiError(r);
-      renderError(document.getElementById('st-script-list'), err);
-      toast(err.message, 'err');
-      return;
-    }
-    const data = await r.json();
-    const scenes = data.scenes || [];
-    const list = document.getElementById('st-script-list');
-    
-    if (!scenes.length) {
-      list.innerHTML = '<div class="empty-state">Naskah kosong, coba generate ulang.</div>';
-    } else {
-      list.innerHTML = scenes.map((s, i) => `
-        <div class="scene-card">
-          <div class="scene-card__num">SCENE ${String(i+1).padStart(2,'0')}</div>
-          <div>${escapeHtml(s.text)}</div>
-          <div class="scene-card__keyword">🎬 ${escapeHtml(s.keyword)}</div>
-        </div>`).join('');
-    }
-    toast(`${scenes.length} scene dibuat`);
-  } catch (e) {
-    renderError(document.getElementById('st-script-list'), { message: e.message || 'Network error', hint: 'Cek koneksi dan coba lagi.' });
-    toast(e.message, 'err');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '◎ Preview Naskah';
-  }
-});
-
-document.getElementById('st-start').addEventListener('click', async () => {
-  const opts = collectStoryOpts();
-  if (!opts.title) return toast('Isi judul/topik dulu', 'err');
-  const btn = document.getElementById('st-start');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span> RENDERING...';
-  document.getElementById('st-log').innerHTML = '';
-  document.getElementById('st-result').innerHTML = '';
-  
-  try {
-    const r = await API.stStart(opts);
-    await pollJob(r.job_id, 'st-log', (result) => renderStoryResult(result));
-  } catch (e) {
-    toast(e.message, 'err');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '◈ GENERATE STORY VIDEO ◈';
-  }
-});
-
-function renderStoryResult(result) {
-  document.getElementById('st-result').innerHTML = `
-    <div class="result-card">
-      <h3>✓ STORY GENERATED</h3>
-      <video src="${escapeHtml(result.output_url)}" controls style="width:100%;max-height:300px;border:1px solid var(--border-glow)"></video>
-      <div class="divider"></div>
-      <div class="meta-row"><span class="meta-row__label">DURASI</span><span class="meta-row__value">${result.duration.toFixed(1)} detik</span></div>
-      <div class="meta-row"><span class="meta-row__label">SCENES</span><span class="meta-row__value">${result.scenes?.length || 0}</span></div>
       <div class="divider"></div>
       <a class="btn" href="${escapeHtml(result.output_url)}" download>⤓ DOWNLOAD VIDEO</a>
     </div>`;

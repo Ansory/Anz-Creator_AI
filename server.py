@@ -52,7 +52,6 @@ logger = logging.getLogger("anz-creator.server")
 # ── Imports internal (setelah sys.path di-set) ───────────────────────────────
 from core.api_rotator import AllKeysExhaustedError, get_rotator
 from core.short_maker import ShortMaker, ShortMakerOptions
-from core.story_teller import StoryTeller, StoryTellerOptions
 
 # ── Version ──────────────────────────────────────────────────────────────────
 try:
@@ -200,20 +199,6 @@ class ShortMakerBody(BaseModel):
     use_gpu: bool = False
     bypass_copyright: bool = False
     language: str = "id"
-
-
-class StoryTellerBody(BaseModel):
-    title: str
-    genre: str = "Drama"
-    style: str = "Dramatis"
-    length: str = "medium"
-    language: str = "id"
-    tts_voice: str = "female"
-    tts_speed: str = "normal"
-    bgm_mood: str = "epic"
-    aspect: str = "9:16"
-    quality: str = "1080p"
-    use_footage: bool = True
 
 
 class FindViralBody(BaseModel):
@@ -402,67 +387,6 @@ async def short_maker_start(body: ShortMakerBody):
             JOBS[jid]["status"] = "done"
         except Exception as e:
             logger.error(f"[short-maker] {e}\n{traceback.format_exc()}")
-            JOBS[jid]["status"] = "error"
-            JOBS[jid]["error"] = str(e) or e.__class__.__name__
-
-    asyncio.create_task(run())
-    return {"job_id": jid}
-
-
-# ── Story Teller ──────────────────────────────────────────────────────────────
-@app.post("/api/story-teller/preview")
-def story_preview(body: StoryTellerBody):
-    _ensure_keys_available()
-    if not body.title or not body.title.strip():
-        raise HTTPException(
-            400,
-            detail={"code": "MISSING_TITLE", "message": "Judul/topik cerita wajib diisi."},
-        )
-    st = StoryTeller(
-        get_rotator(),
-        OUTPUT_DIR,
-        pexels_key=os.getenv("PEXELS_API_KEY", ""),
-        pixabay_key=os.getenv("PIXABAY_API_KEY", ""),
-    )
-    try:
-        opts = StoryTellerOptions(**body.model_dump())
-        scenes = st.preview_script(opts)
-        return {"ok": True, "scenes": scenes}
-    except AllKeysExhaustedError as e:
-        raise HTTPException(503, detail={"code": "KEYS_EXHAUSTED", "message": str(e)})
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, detail=_format_exception_error(e))
-
-
-@app.post("/api/story-teller/start")
-async def story_start(body: StoryTellerBody):
-    _ensure_keys_available()
-    jid = _new_job()
-
-    async def run():
-        JOBS[jid]["status"] = "running"
-        try:
-            opts = StoryTellerOptions(**body.model_dump())
-            st = StoryTeller(
-                get_rotator(),
-                OUTPUT_DIR,
-                pexels_key=os.getenv("PEXELS_API_KEY", ""),
-                pixabay_key=os.getenv("PIXABAY_API_KEY", ""),
-            )
-            result = await asyncio.to_thread(st.process, opts, lambda m: _log_to_job(jid, m))
-            JOBS[jid]["result"] = {
-                "output_path": result.output_path,
-                "output_url": _to_url(result.output_path),
-                "thumbnail_url": _to_url(result.thumbnail_path),
-                "script": result.script,
-                "scenes": result.scenes,
-                "duration": result.duration,
-            }
-            JOBS[jid]["status"] = "done"
-        except Exception as e:
-            logger.error(f"[story-teller] {e}\n{traceback.format_exc()}")
             JOBS[jid]["status"] = "error"
             JOBS[jid]["error"] = str(e) or e.__class__.__name__
 
