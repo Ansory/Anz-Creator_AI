@@ -282,26 +282,36 @@ def transform_aspect(
 
 # -------------------------------------------------------------- Subtitle burn
 # Warna FFmpeg ASS format: &HAABBGGRR (AA=alpha 00=opaque, BB blue, GG green, RR red)
+# Alignment=2 = bottom-center (standard subtitle position)
+# WrapStyle=0 = smart wrap (potong kata tidak di tengah kata)
 _CAPTION_STYLES: dict[str, str] = {
-    "classic_white":    "FontName=Arial,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,Alignment=2",
-    "hormozi_bold":     "FontName=Impact,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=4,Shadow=0,Alignment=2",
-    "mrbeast":          "FontName=Arial Black,Bold=1,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=5,Shadow=1,Alignment=2",
-    "ali_abdaal":       "FontName=Arial,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2",
-    "iman_gadzhi":      "FontName=Arial,Bold=1,Italic=1,PrimaryColour=&H00F0F0F0,OutlineColour=&H00111111,BackColour=&H00000000,BorderStyle=1,Outline=1,Shadow=0,Alignment=2",
-    "cyberpunk":        "FontName=Courier New,Bold=1,PrimaryColour=&H00FFFF00,OutlineColour=&H00FF00FF,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=2,Alignment=2",
-    "aesthetic_retro":  "FontName=Arial,Bold=0,Italic=1,PrimaryColour=&H00FF80C0,OutlineColour=&H00800040,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,Alignment=2",
-    "movie_subtitle":   "FontName=Arial,Bold=0,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2",
-    "hacker_terminal":  "FontName=Courier New,Bold=1,PrimaryColour=&H0000FF00,OutlineColour=&H00000000,BackColour=&HAA000000,BorderStyle=4,Outline=0,Shadow=0,Alignment=2",
-    "comic_pop":        "FontName=Arial,Bold=1,PrimaryColour=&H00FF0000,OutlineColour=&H0000FFFF,BackColour=&H00000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2",
-    "fire_red":         "FontName=Impact,Bold=1,PrimaryColour=&H000000FF,OutlineColour=&H000060FF,BackColour=&H00000000,BorderStyle=1,Outline=3,Shadow=2,Alignment=2",
-    "box_kotak":        "FontName=Arial,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H99000000,BorderStyle=4,Outline=0,Shadow=0,Alignment=2",
-    "neon_glow":        "FontName=Arial,Bold=1,PrimaryColour=&H00FFFF00,OutlineColour=&H00FFFF00,BackColour=&H00000000,BorderStyle=1,Outline=4,Shadow=3,Alignment=2",
-    "karaoke_green":    "FontName=Arial,Bold=1,PrimaryColour=&H0000FF00,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,Alignment=2",
+    "classic_white":    "FontName=Arial,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H80000000,BorderStyle=1,Outline=2,Shadow=1,Alignment=2,WrapStyle=0",
+    "hormozi_bold":     "FontName=Impact,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=4,Shadow=0,Alignment=2,WrapStyle=0",
+    "mrbeast":          "FontName=Arial Black,Bold=1,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=5,Shadow=1,Alignment=2,WrapStyle=0",
+    "ali_abdaal":       "FontName=Arial,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H60000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2,WrapStyle=0",
+    "iman_gadzhi":      "FontName=Arial,Bold=1,Italic=1,PrimaryColour=&H00F0F0F0,OutlineColour=&H00111111,BackColour=&H00000000,BorderStyle=1,Outline=1,Shadow=0,Alignment=2,WrapStyle=0",
+    "cyberpunk":        "FontName=Courier New,Bold=1,PrimaryColour=&H00FFFF00,OutlineColour=&H00FF00FF,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=2,Alignment=2,WrapStyle=0",
+    "aesthetic_retro":  "FontName=Arial,Bold=0,Italic=1,PrimaryColour=&H00FF80C0,OutlineColour=&H00800040,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,Alignment=2,WrapStyle=0",
+    "movie_subtitle":   "FontName=Arial,Bold=0,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BackColour=&H80000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,WrapStyle=0",
+    "hacker_terminal":  "FontName=Courier New,Bold=1,PrimaryColour=&H0000FF00,OutlineColour=&H00000000,BackColour=&HAA000000,BorderStyle=4,Outline=0,Shadow=0,Alignment=2,WrapStyle=0",
+    "comic_pop":        "FontName=Arial,Bold=1,PrimaryColour=&H00FF0000,OutlineColour=&H0000FFFF,BackColour=&H00000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2,WrapStyle=0",
+    "fire_red":         "FontName=Impact,Bold=1,PrimaryColour=&H000000FF,OutlineColour=&H000060FF,BackColour=&H00000000,BorderStyle=1,Outline=3,Shadow=2,Alignment=2,WrapStyle=0",
+    "box_kotak":        "FontName=Arial,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&HCC000000,BorderStyle=4,Outline=0,Shadow=0,Alignment=2,WrapStyle=0",
+    "neon_glow":        "FontName=Arial,Bold=1,PrimaryColour=&H00FFFF00,OutlineColour=&H00FFFF00,BackColour=&H00000000,BorderStyle=1,Outline=4,Shadow=3,Alignment=2,WrapStyle=0",
+    "karaoke_green":    "FontName=Arial,Bold=1,PrimaryColour=&H0000FF00,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,Alignment=2,WrapStyle=0",
 }
 
+# Font size sebagai rasio tinggi video — dikalibrasi untuk Shorts/Reels 9:16
 _STYLE_SIZE_RATIOS: dict[str, float] = {
-    "hormozi_bold": 0.055, "mrbeast": 0.060, "fire_red": 0.055,
-    "ali_abdaal": 0.038,   "iman_gadzhi": 0.035,
+    "hormozi_bold":  0.048,   # Bold besar — word-by-word impact
+    "mrbeast":       0.050,   # Kuning besar
+    "fire_red":      0.046,   # Impact merah
+    "comic_pop":     0.042,   # Tebal berwarna
+    "ali_abdaal":    0.032,   # Elegan tipis
+    "iman_gadzhi":   0.030,   # Italic halus
+    "movie_subtitle":0.030,   # Subtitle bioskop kecil
+    "hacker_terminal":0.032,  # Monospace kecil
+    # default untuk style lainnya: 0.038
 }
 
 def _escape_ffmpeg_filter_path(p: str | Path) -> str:
@@ -324,15 +334,23 @@ def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
                    use_gpu: bool = False, encoding: str = "balanced") -> str:
     """Burn SRT subtitle ke video dengan caption style yang dipilih."""
     srt_escaped = _escape_ffmpeg_filter_path(srt_path)
-    _, h = get_video_size(src)
+    w, h = get_video_size(src)
     h = h or 1080
-    size_ratio = _STYLE_SIZE_RATIOS.get(style_name, 0.045)
+    w = w or 608
+
+    size_ratio = _STYLE_SIZE_RATIOS.get(style_name, 0.038)
     font_size = max(14, int(h * size_ratio))
-    margin_v = max(20, int(h * 0.046))
+
+    # MarginV: 12% dari tinggi — memberi safe zone dari UI phone/chrome di bawah
+    margin_v = max(60, int(h * 0.12))
+    # MarginL/R: 5% dari lebar — teks tidak mepet tepi kiri/kanan
+    margin_lr = max(20, int(w * 0.05))
+
     style_base = _CAPTION_STYLES.get(style_name, _CAPTION_STYLES["classic_white"])
     vf = (
         f"subtitles='{srt_escaped}':force_style='"
-        f"{style_base},FontSize={font_size},MarginV={margin_v}'"
+        f"{style_base},FontSize={font_size},"
+        f"MarginV={margin_v},MarginL={margin_lr},MarginR={margin_lr}'"
     )
     args = ["-i", str(src), "-vf", vf]
     args += _encoder_flags(use_gpu, encoding)
