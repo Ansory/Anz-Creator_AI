@@ -57,14 +57,18 @@ DURATION_PRESETS = {
 # -------------------------------------------------------------- Data classes
 @dataclass
 class ShortMakerOptions:
-    source: str                  # URL atau path lokal
-    source_type: str = "url"     # "url" | "file"
-    transform_mode: str = "blur"
-    aspect: str = "9:16"
-    quality: str = "1080p"
+    source: str                       # URL atau path lokal
+    source_type: str = "url"          # "url" | "file"
+    transform_mode: str = "blur"      # blur|bars|crop|smart|original
+    aspect: str = "9:16"              # 9:16|1:1|4:5
+    quality: str = "1080p"            # 4K|2K|1080p|720p|480p|360p
     caption_ai: bool = True
+    caption_style: str = "classic_white"   # 14 gaya subtitle
+    caption_language: str = "original"    # original|id|en
+    animate_text: bool = False             # word-by-word highlight
+    word_density: int = 2                  # 1-5 kata per layar
     topic: str = "free"
-    duration_preset: str = "auto"  # auto|short|medium|long|custom|manual
+    duration_preset: str = "auto"     # auto|short|medium|long|custom
     custom_start: float = 0.0
     custom_end: float = 0.0
     encoding: str = "balanced"
@@ -283,17 +287,30 @@ PENTING:
         ff.cut_video(src_path, cut_path, start, end)
 
         # 4. Transform aspect
-        transformed_path = self.work_dir / f"trans_{job_id}.mp4"
-        log(f"Transform aspect ({opts.transform_mode}, {opts.aspect})...")
-        ff.transform_aspect(
-            cut_path, transformed_path,
-            mode=opts.transform_mode,
-            aspect=opts.aspect,
-            quality=opts.quality,
-            use_gpu=opts.use_gpu,
-            encoding=opts.encoding,
-            bypass_copyright=opts.bypass_copyright,
-        )
+        if opts.transform_mode == "original":
+            log("Mode original — pertahankan aspect ratio asli...")
+            transformed_path = self.work_dir / f"trans_{job_id}.mp4"
+            ff.transform_aspect(
+                cut_path, transformed_path,
+                mode="original",
+                aspect=opts.aspect,
+                quality=opts.quality,
+                use_gpu=opts.use_gpu,
+                encoding=opts.encoding,
+                bypass_copyright=opts.bypass_copyright,
+            )
+        else:
+            transformed_path = self.work_dir / f"trans_{job_id}.mp4"
+            log(f"Transform aspect ({opts.transform_mode}, {opts.aspect})...")
+            ff.transform_aspect(
+                cut_path, transformed_path,
+                mode=opts.transform_mode,
+                aspect=opts.aspect,
+                quality=opts.quality,
+                use_gpu=opts.use_gpu,
+                encoding=opts.encoding,
+                bypass_copyright=opts.bypass_copyright,
+            )
 
         # 5. Subtitle (opsional)
         caption_applied = False
@@ -304,6 +321,7 @@ PENTING:
             captioned_path = self.work_dir / f"cap_{job_id}.mp4"
             try:
                 ff.burn_subtitles(transformed_path, captioned_path, srt_path,
+                                  style_name=opts.caption_style,
                                   use_gpu=opts.use_gpu, encoding=opts.encoding)
                 final_src = captioned_path
                 caption_applied = True
@@ -360,25 +378,33 @@ PENTING:
         topic_desc = TOPICS.get(topic, TOPICS["free"])
         lang_label = "Bahasa Indonesia" if language == "id" else "English"
 
-        prompt = f"""Kamu adalah viral moment detector.
+        prompt = f"""Kamu adalah viral moment detector ahli untuk YouTube Shorts, TikTok, dan Instagram Reels.
 Video berdurasi {duration:.1f} detik. Topik fokus: {topic_desc}.
 
-Berikan 3 kandidat momen viral terbaik.
+Berikan hingga 10 kandidat momen viral terbaik (lebih sedikit jika video pendek).
 
-Output JSON strict ({lang_label}):
+Output JSON strict dalam {lang_label}:
 {{
   "moments": [
     {{
       "start_seconds": <num>,
       "end_seconds": <num>,
-      "title": "<judul 5-9 kata>",
-      "hook": "<1 kalimat hook>",
-      "score": <1-10>
+      "title": "<judul click-bait 5-9 kata>",
+      "hook": "<1 kalimat hook paling menarik>",
+      "hook_quote": "<kutipan singkat dari video yang cocok jadi caption atau thumbnail text>",
+      "score": <1-10>,
+      "score_label": "<HOOK KUAT|PLOT TWIST|FAKTA MENGEJUTKAN|MOMEN EMOSIONAL|PUNCHLINE|VIRAL QUOTE|KONTROVERSI|TUTORIAL KEY|REVEAL|INSPIRASI>",
+      "description": "<2 kalimat singkat kenapa momen ini punya potensi viral>",
+      "caption_suggestion": "<caption siap-upload dengan emoji dan hashtag, 2-4 kalimat, bahasa {lang_label}>"
     }}
   ]
 }}
 
-HANYA JSON, tanpa teks lain."""
+Aturan:
+- start_seconds & end_seconds dalam rentang [0, {duration:.1f}]
+- Durasi tiap clip 30–90 detik
+- score_label harus salah satu dari daftar yang tersedia
+- HANYA JSON, tanpa teks lain."""
         try:
             return self.gemini.generate_json(prompt)
         except Exception as e:  # noqa: BLE001

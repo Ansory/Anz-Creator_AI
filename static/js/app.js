@@ -156,9 +156,87 @@ document.querySelectorAll('.tabs').forEach(tabs => {
   });
 });
 
-/* -------------------- Duration preset -------------------- */
-document.getElementById('sm-duration').addEventListener('change', (e) => {
-  document.getElementById('sm-custom-time').classList.toggle('hidden', e.target.value !== 'custom');
+/* -------------------- SHORT MAKER: Mode cards -------------------- */
+function getTransformMode() {
+  const active = document.querySelector('#sm-mode-grid .mode-card.active, #sm-mode-normal.active');
+  return active ? active.dataset.mode : 'blur';
+}
+
+document.getElementById('sm-mode-grid').addEventListener('click', (e) => {
+  const card = e.target.closest('.mode-card');
+  if (!card) return;
+  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('active'));
+  card.classList.add('active');
+  document.getElementById('sm-aspect-field').classList.toggle('hidden', card.dataset.mode === 'original');
+});
+
+document.getElementById('sm-mode-normal').addEventListener('click', () => {
+  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('sm-mode-normal').classList.add('active');
+  document.getElementById('sm-aspect-field').classList.add('hidden');
+});
+
+/* -------------------- SHORT MAKER: Caption toggle -------------------- */
+document.getElementById('sm-caption').addEventListener('change', (e) => {
+  document.getElementById('sm-caption-opts').classList.toggle('hidden', !e.target.checked);
+});
+
+/* -------------------- SHORT MAKER: Word density slider -------------------- */
+document.getElementById('sm-word-density').addEventListener('input', (e) => {
+  document.getElementById('sm-density-badge').textContent = e.target.value + ' Kata';
+});
+
+/* -------------------- SHORT MAKER: Time input helpers -------------------- */
+function getTimeSeconds(prefix) {
+  const hh = parseInt(document.getElementById(prefix + '-hh').value || '0', 10) || 0;
+  const mm = parseInt(document.getElementById(prefix + '-mm').value || '0', 10) || 0;
+  const ss = parseInt(document.getElementById(prefix + '-ss').value || '0', 10) || 0;
+  return hh * 3600 + mm * 60 + ss;
+}
+
+function setTimeBoxes(prefix, totalSeconds) {
+  totalSeconds = Math.max(0, Math.floor(totalSeconds));
+  document.getElementById(prefix + '-hh').value = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+  document.getElementById(prefix + '-mm').value = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+  document.getElementById(prefix + '-ss').value = String(totalSeconds % 60).padStart(2, '0');
+}
+
+function updateDurationBadge() {
+  const start = getTimeSeconds('sm-start');
+  const end = getTimeSeconds('sm-end');
+  const badge = document.getElementById('sm-duration-badge');
+  if (end > start) {
+    const dur = end - start;
+    badge.textContent = String(Math.floor(dur / 60)).padStart(2, '0') + ':' + String(dur % 60).padStart(2, '0');
+    badge.style.color = 'var(--green)';
+  } else {
+    badge.textContent = '00:00';
+    badge.style.color = '';
+  }
+}
+
+['sm-start-hh','sm-start-mm','sm-start-ss','sm-end-hh','sm-end-mm','sm-end-ss'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    if (el.value.length >= 2) {
+      const next = el.nextElementSibling?.nextElementSibling;
+      if (next && next.tagName === 'INPUT') next.focus();
+    }
+    updateDurationBadge();
+  });
+});
+
+document.getElementById('sm-start-set').addEventListener('click', () => {
+  updateDurationBadge();
+  toast('Waktu mulai: ' + fmtTime(getTimeSeconds('sm-start')));
+});
+
+document.getElementById('sm-end-set').addEventListener('click', () => {
+  const s = getTimeSeconds('sm-start');
+  const e = getTimeSeconds('sm-end');
+  updateDurationBadge();
+  if (e > 0 && e <= s) toast('⚠ Waktu selesai harus lebih besar dari waktu mulai', 'warn');
+  else toast('Waktu selesai: ' + fmtTime(e));
 });
 
 /* -------------------- Resource monitor -------------------- */
@@ -285,119 +363,222 @@ document.getElementById('sm-url').addEventListener('input', (e) => {
   }
 });
 
-/* -------------------- SHORT MAKER: Find Viral -------------------- */
-document.getElementById('sm-find-viral').addEventListener('click', async () => {
-  const sourceType = document.querySelector('.tabs__tab.active').dataset.tab;
-  const source = sourceType === 'url' ? document.getElementById('sm-url').value.trim() : uploadedFilePath;
-  if (!source) return toast('Masukkan URL atau upload file dulu', 'err');
-  
-  const btn = document.getElementById('sm-find-viral');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span> Scanning...';
-  
-  const list = document.getElementById('sm-viral-list');
-  list.innerHTML = '<div class="text-sm text-muted">AI sedang menganalisis video...</div>';
-  
-  try {
-    const r = await API.smFindViral({
-      source, source_type: sourceType,
-      topic: document.getElementById('sm-topic').value,
-      language: segValue('sm-language') || 'id',
-    });
-    
-    if (!r.ok) {
-      const err = await parseApiError(r);
-      renderError(list, err);
-      toast(err.message, 'err');
-      return;
-    }
-    
-    const data = await r.json();
-    const moments = data.data?.moments || [];
-    
-    if (!moments.length) {
-      list.innerHTML = '<div class="empty-state">Tidak ada momen terdeteksi.</div>';
-    } else {
-      list.innerHTML = moments.map(m => `
-        <div class="viral-moment" data-start="${m.start_seconds}" data-end="${m.end_seconds}">
-          <div class="viral-moment__score">${escapeHtml(m.score || '—')}</div>
-          <div class="viral-moment__body">
-            <h4>${escapeHtml(m.title)}</h4>
-            <p>${escapeHtml(m.hook || '')}</p>
-          </div>
-          <div class="viral-moment__time">${fmtTime(m.start_seconds)} → ${fmtTime(m.end_seconds)}</div>
-        </div>
-      `).join('');
-      
-      list.querySelectorAll('.viral-moment').forEach(el => {
-        el.addEventListener('click', () => {
-          document.getElementById('sm-duration').value = 'custom';
-          document.getElementById('sm-custom-time').classList.remove('hidden');
-          document.getElementById('sm-start').value = fmtTime(+el.dataset.start);
-          document.getElementById('sm-end').value = fmtTime(+el.dataset.end);
-          toast('Momen dipilih ke Custom Time');
-        });
-      });
-    }
-  } catch (e) {
-    renderError(list, { message: e.message || 'Network error', hint: 'Cek koneksi dan coba lagi.' });
-    toast(e.message, 'err');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '◎ Cari Momen Viral (AI)';
-  }
-});
-
 function fmtTime(sec) {
   sec = Math.max(0, Math.floor(sec));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
 }
 
-function parseTime(str) {
-  if (!str) return 0;
-  const parts = str.split(':').map(Number);
-  if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
-  if (parts.length === 2) return parts[0]*60 + parts[1];
-  return Number(parts[0]) || 0;
+/* -------------------- SHORT MAKER: Viral moments -------------------- */
+let _viralMoments = [];
+let _selectedMoments = new Set();
+
+const SCORE_LABEL_COLORS = {
+  'HOOK KUAT': 'var(--pink)',
+  'PLOT TWIST': 'var(--purple)',
+  'FAKTA MENGEJUTKAN': 'var(--amber)',
+  'EMOSI TINGGI': 'var(--cyan)',
+  'VIRAL POTENTIAL': 'var(--green)',
+};
+
+function updateSelectedCount() {
+  document.getElementById('sm-selected-count').textContent = _selectedMoments.size;
 }
 
-/* -------------------- SHORT MAKER: Start -------------------- */
-document.getElementById('sm-start').addEventListener('click', async () => {
-  const sourceType = document.querySelector('.tabs__tab.active').dataset.tab;
-  const source = sourceType === 'url' ?
-    document.getElementById('sm-url').value.trim() : uploadedFilePath;
-  if (!source) return toast('Masukkan URL atau upload file', 'err');
-  
-  const durPreset = document.getElementById('sm-duration').value;
-  const customEnd = durPreset === 'custom' ? parseTime(document.getElementById('sm-end').value) : 0;
-  if (durPreset === 'custom' && customEnd === 0) {
-    toast('⚠ Waktu selesai kosong — otomatis pakai start + 60 detik', 'warn');
+function syncSelectAll() {
+  const allChecked = _viralMoments.length > 0 && _viralMoments.every((_, i) => _selectedMoments.has(i));
+  document.getElementById('sm-select-all').checked = allChecked;
+}
+
+function renderViralMoments(moments) {
+  _viralMoments = moments || [];
+  _selectedMoments = new Set();
+  updateSelectedCount();
+
+  document.getElementById('sm-viral-panel').classList.remove('hidden');
+  document.getElementById('sm-viral-empty').classList.add('hidden');
+
+  const list = document.getElementById('sm-viral-list');
+
+  if (!_viralMoments.length) {
+    list.innerHTML = '<div class="empty-state">Tidak ada momen viral terdeteksi.</div>';
+    return;
   }
+
+  list.innerHTML = _viralMoments.map((m, i) => {
+    const scoreColor = SCORE_LABEL_COLORS[m.score_label] || 'var(--cyan)';
+    const dur = Math.round((m.end_seconds || 0) - (m.start_seconds || 0));
+    return '<div class="viral-card" data-index="' + i + '">'
+      + '<div class="viral-card__head">'
+      + '<label class="check check--sm" style="flex-shrink:0"><input type="checkbox" class="viral-check" data-index="' + i + '"><span class="check__box"></span></label>'
+      + '<span class="viral-card__num">#' + String(i + 1).padStart(2, '0') + '</span>'
+      + '<span class="viral-card__title">' + escapeHtml(m.title || '—') + '</span>'
+      + '<span class="score-badge" style="color:' + scoreColor + ';border-color:' + scoreColor + '">' + escapeHtml(m.score_label || 'VIRAL') + '</span>'
+      + '<span class="duration-pill">' + fmtTime(m.start_seconds || 0) + ' · ' + dur + 's</span>'
+      + '</div>'
+      + (m.hook_quote ? '<div class="viral-card__quote">"' + escapeHtml(m.hook_quote) + '"</div>' : '')
+      + (m.description ? '<div class="viral-card__desc">' + escapeHtml(m.description) + '</div>' : '')
+      + (m.caption_suggestion ? '<details class="viral-card__caption-detail"><summary class="viral-card__caption-toggle">📝 Saran Caption</summary><div class="viral-card__caption">' + escapeHtml(m.caption_suggestion) + '</div></details>' : '')
+      + '<div class="viral-card__actions">'
+      + '<button class="btn btn--sm btn--ghost" data-action="set-time" data-index="' + i + '">⊙ Set Waktu</button>'
+      + '<button class="btn btn--sm" data-action="convert" data-index="' + i + '">◈ Convert</button>'
+      + '<button class="btn btn--sm btn--ghost" data-action="copy" data-index="' + i + '">📋 Salin</button>'
+      + '</div></div>';
+  }).join('');
+
+  list.querySelectorAll('.viral-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const idx = parseInt(cb.dataset.index, 10);
+      cb.checked ? _selectedMoments.add(idx) : _selectedMoments.delete(idx);
+      updateSelectedCount();
+      syncSelectAll();
+    });
+  });
+
+  list.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index, 10);
+      const m = _viralMoments[idx];
+      if (!m) return;
+      if (btn.dataset.action === 'set-time') {
+        setTimeBoxes('sm-start', m.start_seconds || 0);
+        setTimeBoxes('sm-end', m.end_seconds || 0);
+        updateDurationBadge();
+        toast('Momen #' + (idx + 1) + ' → ' + fmtTime(m.start_seconds || 0) + ' – ' + fmtTime(m.end_seconds || 0));
+      } else if (btn.dataset.action === 'convert') {
+        setTimeBoxes('sm-start', m.start_seconds || 0);
+        setTimeBoxes('sm-end', m.end_seconds || 0);
+        updateDurationBadge();
+        startConversion();
+      } else if (btn.dataset.action === 'copy') {
+        const text = m.caption_suggestion || m.description || m.title || '';
+        navigator.clipboard.writeText(text).then(() => toast('Caption disalin!')).catch(() => toast('Gagal salin', 'err'));
+      }
+    });
+  });
+
+  document.getElementById('sm-select-all').checked = false;
+}
+
+document.getElementById('sm-select-all').addEventListener('change', (e) => {
+  _viralMoments.forEach((_, i) => e.target.checked ? _selectedMoments.add(i) : _selectedMoments.delete(i));
+  document.querySelectorAll('.viral-check').forEach(cb => { cb.checked = e.target.checked; });
+  updateSelectedCount();
+});
+
+document.getElementById('sm-bulk-copy').addEventListener('click', () => {
+  if (!_selectedMoments.size) return toast('Pilih momen dulu', 'warn');
+  const text = [..._selectedMoments].sort().map(i => {
+    const m = _viralMoments[i];
+    return '#' + (i + 1) + ' ' + m.title + '\n' + fmtTime(m.start_seconds || 0) + ' → ' + fmtTime(m.end_seconds || 0) + '\n' + (m.caption_suggestion || m.description || '');
+  }).join('\n\n---\n\n');
+  navigator.clipboard.writeText(text).then(() => toast(_selectedMoments.size + ' caption disalin!')).catch(() => toast('Gagal salin', 'err'));
+});
+
+document.getElementById('sm-bulk-convert').addEventListener('click', async () => {
+  if (!_selectedMoments.size) return toast('Pilih momen dulu', 'warn');
+  toast('Memulai convert ' + _selectedMoments.size + ' video...');
+  for (const idx of [..._selectedMoments].sort()) {
+    const m = _viralMoments[idx];
+    setTimeBoxes('sm-start', m.start_seconds || 0);
+    setTimeBoxes('sm-end', m.end_seconds || 0);
+    updateDurationBadge();
+    await startConversion();
+  }
+});
+
+document.getElementById('sm-viral-close').addEventListener('click', () => {
+  document.getElementById('sm-viral-panel').classList.add('hidden');
+  document.getElementById('sm-viral-empty').classList.remove('hidden');
+});
+
+document.getElementById('sm-viral-refresh').addEventListener('click', () => {
+  document.getElementById('sm-find-viral').click();
+});
+
+/* -------------------- SHORT MAKER: Find Viral -------------------- */
+document.getElementById('sm-find-viral').addEventListener('click', async () => {
+  const sourceType = document.querySelector('.tabs__tab.active').dataset.tab;
+  const source = sourceType === 'url' ? document.getElementById('sm-url').value.trim() : uploadedFilePath;
+  if (!source) return toast('Masukkan URL atau upload file dulu', 'err');
+
+  const btn = document.getElementById('sm-find-viral');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Scanning...';
+
+  try {
+    const r = await API.smFindViral({
+      source, source_type: sourceType,
+      topic: document.getElementById('sm-topic').value,
+      duration_preset: document.getElementById('sm-duration').value,
+      language: document.getElementById('sm-caption-language').value,
+    });
+
+    if (!r.ok) {
+      const err = await parseApiError(r);
+      toast(err.message, 'err');
+      renderViralMoments([]);
+      renderError(document.getElementById('sm-viral-list'), err);
+      return;
+    }
+
+    const data = await r.json();
+    const moments = data.data?.moments || [];
+    renderViralMoments(moments);
+    if (moments.length) toast(moments.length + ' momen viral ditemukan!', 'ok');
+    else toast('Tidak ada momen terdeteksi', 'warn');
+  } catch (e) {
+    toast(e.message || 'Network error', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Cari Momen Viral (AI)';
+  }
+});
+
+/* -------------------- SHORT MAKER: Conversion -------------------- */
+async function startConversion() {
+  const sourceType = document.querySelector('.tabs__tab.active').dataset.tab;
+  const source = sourceType === 'url' ? document.getElementById('sm-url').value.trim() : uploadedFilePath;
+  if (!source) { toast('Masukkan URL atau upload file', 'err'); return; }
+
+  const startSec = getTimeSeconds('sm-start');
+  const endSec = getTimeSeconds('sm-end');
+  if (endSec > 0 && endSec <= startSec) {
+    toast('⚠ Waktu selesai harus lebih besar dari waktu mulai', 'warn');
+    return;
+  }
+
+  const captionOn = document.getElementById('sm-caption').checked;
+  const transformMode = getTransformMode();
+
   const body = {
     source, source_type: sourceType,
-    transform_mode: document.getElementById('sm-mode').value,
-    aspect: segValue('sm-aspect'),
-    quality: segValue('sm-quality'),
-    caption_ai: document.getElementById('sm-caption').checked,
+    transform_mode: transformMode,
+    aspect: transformMode === 'original' ? '9:16' : document.getElementById('sm-aspect').value,
+    quality: document.getElementById('sm-quality').value,
+    caption_ai: captionOn,
+    caption_style: captionOn ? document.getElementById('sm-caption-style').value : 'classic_white',
+    caption_language: captionOn ? document.getElementById('sm-caption-language').value : 'original',
+    animate_text: captionOn && document.getElementById('sm-animate-text').checked,
+    word_density: captionOn ? parseInt(document.getElementById('sm-word-density').value, 10) : 2,
     topic: document.getElementById('sm-topic').value,
-    duration_preset: durPreset,
-    custom_start: durPreset === 'custom' ? parseTime(document.getElementById('sm-start').value) : 0,
-    custom_end: customEnd,
+    duration_preset: document.getElementById('sm-duration').value,
+    custom_start: startSec,
+    custom_end: endSec,
     encoding: segValue('sm-encoding'),
     use_gpu: document.getElementById('sm-gpu').checked,
     bypass_copyright: document.getElementById('sm-bypass').checked,
-    language: segValue('sm-language') || 'id',
+    language: document.getElementById('sm-caption-language').value,
   };
-  
+
   const btn = document.getElementById('sm-start');
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> PROCESSING...';
   document.getElementById('sm-log').innerHTML = '';
   document.getElementById('sm-result').innerHTML = '';
-  
+
   try {
     const r = await API.smStart(body);
     await pollJob(r.job_id, 'sm-log', (result) => renderShortResult(result));
@@ -407,12 +588,14 @@ document.getElementById('sm-start').addEventListener('click', async () => {
     btn.disabled = false;
     btn.innerHTML = '◈ INITIALIZE CONVERSION ◈';
   }
-});
+}
+
+document.getElementById('sm-start').addEventListener('click', startConversion);
 
 function renderShortResult(result) {
-  const tagsHtml = (result.tags||[]).map(t => `<span class="tag-chip">#${escapeHtml(t)}</span>`).join('');
+  const tagsHtml = (result.tags || []).map(t => '<span class="tag-chip">#' + escapeHtml(t) + '</span>').join('');
   const captionWarn = (result.caption_applied === false)
-    ? `<div style="color:var(--amber);font-size:12px;margin-bottom:8px">⚠ Caption gagal diburn — video tanpa subtitle</div>`
+    ? '<div style="color:var(--amber);font-size:12px;margin-bottom:8px">⚠ Caption gagal diburn — video tanpa subtitle</div>'
     : '';
   document.getElementById('sm-result').innerHTML = `
     <div class="result-card">
@@ -425,7 +608,7 @@ function renderShortResult(result) {
       <div class="meta-row"><span class="meta-row__label">SEGMEN</span><span class="meta-row__value">${fmtTime(result.start_seconds)} → ${fmtTime(result.end_seconds)}</span></div>
       <div class="meta-row"><span class="meta-row__label">DESKRIPSI</span><span class="meta-row__value">${escapeHtml(result.description)}</span></div>
       <div class="meta-row"><span class="meta-row__label">TAGS</span><span class="meta-row__value">${tagsHtml}</span></div>
-      ${result.pinned_comment ? `<div class="meta-row"><span class="meta-row__label">PIN COMMENT</span><span class="meta-row__value">${escapeHtml(result.pinned_comment)}</span></div>` : ''}
+      ${result.pinned_comment ? '<div class="meta-row"><span class="meta-row__label">PIN COMMENT</span><span class="meta-row__value">' + escapeHtml(result.pinned_comment) + '</span></div>' : ''}
       <div class="divider"></div>
       <a class="btn" href="${escapeHtml(result.output_url)}" download>⤓ DOWNLOAD VIDEO</a>
     </div>`;

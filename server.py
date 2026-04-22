@@ -191,6 +191,10 @@ class ShortMakerBody(BaseModel):
     aspect: str = "9:16"
     quality: str = "1080p"
     caption_ai: bool = True
+    caption_style: str = "classic_white"
+    caption_language: str = "original"
+    animate_text: bool = False
+    word_density: int = 2
     topic: str = "free"
     duration_preset: str = "auto"
     custom_start: float = 0.0
