@@ -338,36 +338,23 @@ def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
     h = h or 1080
     w = w or 608
 
-    # 1. Deteksi Orientasi Video
     is_portrait = h > w
 
-    # 2. Pengaturan Ukuran dan Posisi Profesional
-    if is_portrait:
-        # PENGATURAN VIDEO VERTIKAL (Shorts / Reels / TikTok - 9:16)
-        # Font lebih proporsional, tidak menutupi seluruh layar
-        font_size = max(14, int(h * 0.026)) 
-        # Margin dari bawah (naik sedikit agar tidak tertutup caption/UI TikTok)
-        margin_v = int(h * 0.15)            
-        margin_lr = int(w * 0.08)
-    else:
-        # PENGATURAN VIDEO HORIZONTAL (YouTube Biasa - 16:9)
-        # Font standar sinematik
-        font_size = max(14, int(h * 0.040))
-        # Mepet ke bawah layar ala Netflix/Bioskop
-        margin_v = int(h * 0.06)            
-        margin_lr = int(w * 0.05)
+    size_ratio = _STYLE_SIZE_RATIOS.get(style_name, 0.038)
+    font_size = max(14, int(h * size_ratio))
 
-    # Ambil style dasar jika ada, atau kosongkan
-    style_base = _CAPTION_STYLES.get(style_name, _CAPTION_STYLES.get("classic_white", ""))
-    
-    # 3. KUNCI PERBAIKAN: Tambahkan Alignment=2 (Bottom Center)
-    # Ini akan secara paksa menarik teks dari tengah layar ke bagian bawah (Bottom).
+    # MarginV: 4% dari tinggi — mepet bawah
+    margin_v = max(20, int(h * 0.04))
+    # Portrait (Shorts/Reels): padding kiri/kanan lebih lebar
+    margin_lr = max(20, int(w * (0.08 if is_portrait else 0.05)))
+
+    style_base = _CAPTION_STYLES.get(style_name, _CAPTION_STYLES["classic_white"])
     vf = (
         f"subtitles='{srt_escaped}':force_style='"
         f"{style_base},Alignment=2,FontSize={font_size},"
         f"MarginV={margin_v},MarginL={margin_lr},MarginR={margin_lr}'"
     )
-    
+
     args = ["-i", str(src), "-vf", vf]
     args += _encoder_flags(use_gpu, encoding)
     args += ["-c:a", "copy", str(dst)]
