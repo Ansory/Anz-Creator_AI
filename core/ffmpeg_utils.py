@@ -341,8 +341,8 @@ def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
     size_ratio = _STYLE_SIZE_RATIOS.get(style_name, 0.038)
     font_size = max(14, int(h * size_ratio))
 
-    # MarginV: 12% dari tinggi — memberi safe zone dari UI phone/chrome di bawah
-    margin_v = max(60, int(h * 0.12))
+    # MarginV: 22% dari tinggi — posisi bawah seperti Shorts profesional (±80% turun layar)
+    margin_v = max(80, int(h * 0.22))
     # MarginL/R: 5% dari lebar — teks tidak mepet tepi kiri/kanan
     margin_lr = max(20, int(w * 0.05))
 
