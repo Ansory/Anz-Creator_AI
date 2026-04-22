@@ -198,46 +198,79 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" id="sm-cutter-card">
           <div class="card__corners"></div>
-          <div class="card__title">CLIP CUTTER :: AI VIRAL SCAN</div>
-          <div class="field-row">
-            <div class="field">
-              <label class="field__label">Topik Konten</label>
-              <select class="select" id="sm-topic">
-                <option value="free">🌐 Bebas (Semua Topik)</option>
-                <option value="business">💰 Bisnis &amp; Keuangan</option>
-                <option value="motivation">🧠 Motivasi &amp; Mindset</option>
-                <option value="romance">❤️ Asmara &amp; Hubungan</option>
-                <option value="entertainment">🎭 Hiburan &amp; Komedi</option>
-                <option value="education">💡 Edukasi &amp; Fakta</option>
-              </select>
+          <div class="cutter-header">
+            <div class="card__title" style="margin-bottom:0">CLIP CUTTER (Opsional)</div>
+            <span class="duration-badge" id="sm-duration-badge">00:00</span>
+          </div>
+
+          <div class="viral-scan-row mt-2">
+            <button class="btn-viral-scan" id="sm-find-viral">✨ Cari Momen Viral (AI)</button>
+            <select class="select select--inline" id="sm-topic">
+              <option value="free">🌐 Bebas</option>
+              <option value="business">💰 Bisnis</option>
+              <option value="motivation">🧠 Motivasi</option>
+              <option value="romance">❤️ Asmara</option>
+              <option value="entertainment">🎭 Hiburan</option>
+              <option value="education">💡 Edukasi</option>
+            </select>
+            <select class="select select--inline" id="sm-duration">
+              <option value="auto">Auto (AI)</option>
+              <option value="short">15–30 dtk</option>
+              <option value="medium">30–60 dtk</option>
+              <option value="long">45–90 dtk</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+
+          <div class="time-inputs-row mt-2">
+            <div class="time-input-group">
+              <label class="field__label">WAKTU MULAI</label>
+              <div class="time-hms">
+                <input class="input input--time" id="sm-start-hh" maxlength="2" placeholder="00">
+                <span class="time-sep">:</span>
+                <input class="input input--time" id="sm-start-mm" maxlength="2" placeholder="00">
+                <span class="time-sep">:</span>
+                <input class="input input--time" id="sm-start-ss" maxlength="2" placeholder="00">
+                <button class="btn btn--sm" id="sm-start-set" style="margin-left:4px">⊙ Set</button>
+              </div>
             </div>
-            <div class="field">
-              <label class="field__label">Durasi Clip</label>
-              <select class="select" id="sm-duration">
-                <option value="auto">Auto (AI)</option>
-                <option value="short">15 – 30 detik</option>
-                <option value="medium">30 – 60 detik</option>
-                <option value="long">45 – 90 detik</option>
-                <option value="custom">Custom (manual)</option>
-              </select>
+            <div class="time-input-group">
+              <label class="field__label">WAKTU SELESAI</label>
+              <div class="time-hms">
+                <input class="input input--time" id="sm-end-hh" maxlength="2" placeholder="00">
+                <span class="time-sep">:</span>
+                <input class="input input--time" id="sm-end-mm" maxlength="2" placeholder="00">
+                <span class="time-sep">:</span>
+                <input class="input input--time" id="sm-end-ss" maxlength="2" placeholder="00">
+                <button class="btn btn--sm" id="sm-end-set" style="margin-left:4px">⊙ Set</button>
+              </div>
             </div>
           </div>
-          <div id="sm-custom-time" class="field-row hidden">
-            <div class="field">
-              <label class="field__label">Mulai (HH:MM:SS)</label>
-              <input class="input" id="sm-start" placeholder="00:00:00" />
+
+          <div id="sm-viral-empty" class="mt-2 text-xs text-muted">Klik tombol di atas untuk AI scan momen viral video.</div>
+
+          <div id="sm-viral-panel" class="hidden mt-3">
+            <div class="viral-panel-header">
+              <div class="viral-panel-title">
+                ✨ Momen Terbaik (AI)
+                <span class="badge badge--purple badge--sm">API Pribadi</span>
+              </div>
+              <button class="btn btn--sm btn--ghost" id="sm-viral-close">✕</button>
             </div>
-            <div class="field">
-              <label class="field__label">Selesai (HH:MM:SS)</label>
-              <input class="input" id="sm-end" placeholder="00:00:30" />
+            <div class="viral-bulk-row">
+              <label class="check check--sm">
+                <input type="checkbox" id="sm-select-all">
+                <span class="check__box"></span>
+                <span>Semua</span>
+              </label>
+              <button class="btn btn--sm" id="sm-bulk-copy">📋 Salin</button>
+              <button class="btn btn--sm btn--purple" id="sm-bulk-convert">◈ Convert <span id="sm-selected-count">0</span> Video</button>
+              <button class="btn btn--sm btn--ghost" id="sm-viral-refresh">↺ Ulang</button>
             </div>
+            <div id="sm-viral-list"></div>
           </div>
-          <div class="flex gap-2 mt-2">
-            <button class="btn" id="sm-find-viral">◎ Cari Momen Viral (AI)</button>
-          </div>
-          <div id="sm-viral-list" class="mt-3"></div>
         </div>
       </section>
 
@@ -321,43 +354,107 @@
         <div class="card__title">VIDEO &amp; FORMAT</div>
         <div class="field">
           <label class="field__label">Mode Transformasi</label>
-          <select class="select" id="sm-mode">
-            <option value="blur">Blur Area (sisi kiri/kanan)</option>
-            <option value="bars">Black Bars</option>
-            <option value="crop">Center Crop</option>
-            <option value="smart">Smart AI Crop</option>
+          <div class="mode-grid" id="sm-mode-grid">
+            <button class="mode-card active" data-mode="blur">
+              <span class="mode-card__icon">◧</span>
+              <span class="mode-card__label">Blur Area</span>
+            </button>
+            <button class="mode-card" data-mode="bars">
+              <span class="mode-card__icon">▐</span>
+              <span class="mode-card__label">Black Bars</span>
+            </button>
+            <button class="mode-card" data-mode="crop">
+              <span class="mode-card__icon">⊡</span>
+              <span class="mode-card__label">Center Crop</span>
+            </button>
+            <button class="mode-card" data-mode="smart">
+              <span class="mode-card__icon">✦</span>
+              <span class="mode-card__label">Smart AI</span>
+            </button>
+          </div>
+          <button class="mode-card mode-card--wide" data-mode="original" id="sm-mode-normal">
+            <span class="mode-card__icon">⊞</span>
+            <span class="mode-card__label">Normal (Non-Shorts / Original Ratio)</span>
+          </button>
+        </div>
+        <div class="field" id="sm-aspect-field">
+          <label class="field__label">Aspect Ratio</label>
+          <select class="select" id="sm-aspect">
+            <option value="9:16">9:16 (Shorts / Reels / TikTok)</option>
+            <option value="1:1">1:1 (Instagram Square)</option>
+            <option value="4:5">4:5 (Instagram Feed)</option>
           </select>
         </div>
         <div class="field">
-          <label class="field__label">Aspect Ratio</label>
-          <div class="seg" id="sm-aspect">
-            <div class="seg__item active" data-v="9:16">9:16</div>
-            <div class="seg__item" data-v="16:9">16:9</div>
-            <div class="seg__item" data-v="1:1">1:1</div>
-          </div>
-        </div>
-        <div class="field">
-          <label class="field__label">Kualitas</label>
-          <div class="seg" id="sm-quality">
-            <div class="seg__item active" data-v="1080p">1080P</div>
-            <div class="seg__item" data-v="720p">720P</div>
-            <div class="seg__item" data-v="480p">480P</div>
-          </div>
+          <label class="field__label">Kualitas Subjek Utama YT</label>
+          <select class="select" id="sm-quality">
+            <option value="4K">4K Max (Terbaik)</option>
+            <option value="2K">2K (Sangat Jernih)</option>
+            <option value="1080p" selected>1080p (Standar HD)</option>
+            <option value="720p">720p (Hemat Data)</option>
+            <option value="480p">480p</option>
+            <option value="360p">360p</option>
+          </select>
         </div>
       </div>
       <div class="card">
         <div class="card__corners"></div>
         <div class="card__title">AI &amp; SUBTITLE</div>
-        <label class="toggle">
-          <span class="toggle__label">Caption AI Otomatis</span>
+        <label class="toggle toggle--with-sub">
+          <div class="toggle__text">
+            <span class="toggle__label">Caption AI Otomatis</span>
+            <span class="toggle__sub">Translate &amp; Animasi Instan</span>
+          </div>
           <input type="checkbox" id="sm-caption" checked>
           <span class="toggle__switch"></span>
         </label>
-        <div class="field mt-2">
-          <label class="field__label">Bahasa Output</label>
-          <div class="seg" id="sm-language">
-            <div class="seg__item active" data-v="id">INDONESIA</div>
-            <div class="seg__item" data-v="en">ENGLISH</div>
+        <div id="sm-caption-opts">
+          <div class="field-row mt-2">
+            <div class="field">
+              <label class="field__label">Gaya Caption</label>
+              <select class="select" id="sm-caption-style">
+                <option value="classic_white">🤍 Classic Putih</option>
+                <option value="hormozi_bold">💪 Hormozi Bold</option>
+                <option value="mrbeast">🟡 MrBeast</option>
+                <option value="ali_abdaal">📚 Ali Abdaal</option>
+                <option value="iman_gadzhi">🖤 Iman Gadzhi (Elegan)</option>
+                <option value="cyberpunk">🎮 Cyberpunk (Gaming)</option>
+                <option value="aesthetic_retro">🌸 Aesthetic Retro</option>
+                <option value="movie_subtitle">🎬 Movie Subtitle (Kuning)</option>
+                <option value="hacker_terminal">💻 Hacker Terminal (Kode)</option>
+                <option value="comic_pop">💥 Comic Pop-Art (Biru Kuning)</option>
+                <option value="fire_red">🔥 Fire Merah</option>
+                <option value="box_kotak">⬛ Box Kotak</option>
+                <option value="neon_glow">💜 Neon Glow</option>
+                <option value="karaoke_green">🎤 Karaoke Hijau</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label">Terjemahkan ke</label>
+              <select class="select" id="sm-caption-language">
+                <option value="original">🌐 Sesuai Asli</option>
+                <option value="id">🇮🇩 Indonesia</option>
+                <option value="en">🇬🇧 English</option>
+              </select>
+            </div>
+          </div>
+          <label class="toggle toggle--with-sub mt-2">
+            <div class="toggle__text">
+              <span class="toggle__label">Animasi Teks Berjalan</span>
+              <span class="toggle__sub">Highlight kata demi kata (Gaya Reels/TikTok)</span>
+            </div>
+            <input type="checkbox" id="sm-animate-text">
+            <span class="toggle__switch"></span>
+          </label>
+          <div class="field mt-2">
+            <div class="slider-row">
+              <label class="field__label">Densitas Kata Layar (Speed)</label>
+              <span class="density-badge" id="sm-density-badge">2 Kata</span>
+            </div>
+            <input type="range" class="slider" id="sm-word-density" min="1" max="5" value="2" step="1">
+            <div class="slider-ticks">
+              <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+            </div>
           </div>
         </div>
       </div>

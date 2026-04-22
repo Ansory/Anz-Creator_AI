@@ -171,16 +171,22 @@ def extract_frame(src: str | Path, dst: str | Path, at: float = 1.0) -> str:
 
 
 # -------------------------------------------------------------- Aspect transforms
+_QUALITY_HEIGHTS: dict[str, int] = {
+    "4K": 2160, "2K": 1440, "1080p": 1080, "720p": 720, "480p": 480, "360p": 360,
+}
+
+
 def _target_res(aspect: str, quality: str) -> Tuple[int, int]:
     """Map aspect + quality ke (W, H) — selalu genap."""
-    heights = {"1080p": 1080, "720p": 720, "480p": 480}
-    h = heights.get(quality, 1080)
+    h = _QUALITY_HEIGHTS.get(quality, 1080)
     if aspect == "9:16":
         w = int(h * 9 / 16)
     elif aspect == "16:9":
         w = int(h * 16 / 9)
     elif aspect == "1:1":
         w = h
+    elif aspect == "4:5":
+        w = int(h * 4 / 5)
     else:
         w = int(h * 9 / 16)
     w = w // 2 * 2
@@ -207,7 +213,7 @@ def transform_aspect(
     src: str | Path,
     dst: str | Path,
     *,
-    mode: str = "blur",             # blur | bars | crop | smart
+    mode: str = "blur",             # blur | bars | crop | smart | original
     aspect: str = "9:16",
     quality: str = "1080p",
     use_gpu: bool = False,
@@ -216,11 +222,27 @@ def transform_aspect(
 ) -> str:
     """
     Transform video ke aspect target dengan salah satu mode.
-      - blur  : sisi kiri/kanan di-blur (background), video di-fit di tengah
-      - bars  : sisi kiri/kanan black bars
-      - crop  : center crop ke aspect target
-      - smart : sama dengan crop untuk sekarang (placeholder untuk AI scene detection)
+      - blur     : sisi kiri/kanan di-blur (background), video di-fit di tengah
+      - bars     : sisi kiri/kanan black bars
+      - crop     : center crop ke aspect target
+      - smart    : sama dengan crop (placeholder AI scene detection)
+      - original : scale ke target quality height, pertahankan aspect ratio asli
     """
+    if mode == "original":
+        h_target = (_QUALITY_HEIGHTS.get(quality, 1080) // 2) * 2
+        vf = f"scale=-2:{h_target}"
+        af_parts = []
+        if bypass_copyright:
+            vf = f"{vf},eq=contrast=1.03:saturation=1.05:brightness=0.02,setpts=PTS/1.02"
+            af_parts.append("asetrate=44100*1.02,aresample=44100,atempo=0.9804")
+        args = ["-i", str(src), "-vf", vf]
+        if af_parts:
+            args += ["-af", ",".join(af_parts)]
+        args += _encoder_flags(use_gpu, encoding)
+        args += ["-c:a", "aac", "-movflags", "+faststart", str(dst)]
+        run_ffmpeg(args)
+        return str(dst)
+
     W, H = _target_res(aspect, quality)
 
     if mode == "blur":
@@ -259,6 +281,29 @@ def transform_aspect(
 
 
 # -------------------------------------------------------------- Subtitle burn
+# Warna FFmpeg ASS format: &HAABBGGRR (AA=alpha 00=opaque, BB blue, GG green, RR red)
+_CAPTION_STYLES: dict[str, str] = {
+    "classic_white":    "FontName=Arial,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,Alignment=2",
+    "hormozi_bold":     "FontName=Impact,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=4,Shadow=0,Alignment=2",
+    "mrbeast":          "FontName=Arial Black,Bold=1,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=5,Shadow=1,Alignment=2",
+    "ali_abdaal":       "FontName=Arial,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=1,Shadow=1,Alignment=2",
+    "iman_gadzhi":      "FontName=Arial,Bold=1,Italic=1,PrimaryColour=&H00F0F0F0,OutlineColour=&H00111111,BackColour=&H00000000,BorderStyle=1,Outline=1,Shadow=0,Alignment=2",
+    "cyberpunk":        "FontName=Courier New,Bold=1,PrimaryColour=&H00FFFF00,OutlineColour=&H00FF00FF,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=2,Alignment=2",
+    "aesthetic_retro":  "FontName=Arial,Bold=0,Italic=1,PrimaryColour=&H00FF80C0,OutlineColour=&H00800040,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,Alignment=2",
+    "movie_subtitle":   "FontName=Arial,Bold=0,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2",
+    "hacker_terminal":  "FontName=Courier New,Bold=1,PrimaryColour=&H0000FF00,OutlineColour=&H00000000,BackColour=&HAA000000,BorderStyle=4,Outline=0,Shadow=0,Alignment=2",
+    "comic_pop":        "FontName=Arial,Bold=1,PrimaryColour=&H00FF0000,OutlineColour=&H0000FFFF,BackColour=&H00000000,BorderStyle=1,Outline=3,Shadow=0,Alignment=2",
+    "fire_red":         "FontName=Impact,Bold=1,PrimaryColour=&H000000FF,OutlineColour=&H000060FF,BackColour=&H00000000,BorderStyle=1,Outline=3,Shadow=2,Alignment=2",
+    "box_kotak":        "FontName=Arial,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H99000000,BorderStyle=4,Outline=0,Shadow=0,Alignment=2",
+    "neon_glow":        "FontName=Arial,Bold=1,PrimaryColour=&H00FFFF00,OutlineColour=&H00FFFF00,BackColour=&H00000000,BorderStyle=1,Outline=4,Shadow=3,Alignment=2",
+    "karaoke_green":    "FontName=Arial,Bold=1,PrimaryColour=&H0000FF00,SecondaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,Alignment=2",
+}
+
+_STYLE_SIZE_RATIOS: dict[str, float] = {
+    "hormozi_bold": 0.055, "mrbeast": 0.060, "fire_red": 0.055,
+    "ali_abdaal": 0.038,   "iman_gadzhi": 0.035,
+}
+
 def _escape_ffmpeg_filter_path(p: str | Path) -> str:
     """
     Escape path untuk digunakan dalam filter FFmpeg (contoh: subtitles).
@@ -275,16 +320,19 @@ def _escape_ffmpeg_filter_path(p: str | Path) -> str:
 
 
 def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
+                   style_name: str = "classic_white",
                    use_gpu: bool = False, encoding: str = "balanced") -> str:
-    """Burn SRT subtitle ke video dengan style ala TikTok/Reels."""
+    """Burn SRT subtitle ke video dengan caption style yang dipilih."""
     srt_escaped = _escape_ffmpeg_filter_path(srt_path)
     _, h = get_video_size(src)
-    font_size = max(14, int((h or 1080) * 0.045))
-    margin_v = max(20, int((h or 1080) * 0.046))
+    h = h or 1080
+    size_ratio = _STYLE_SIZE_RATIOS.get(style_name, 0.045)
+    font_size = max(14, int(h * size_ratio))
+    margin_v = max(20, int(h * 0.046))
+    style_base = _CAPTION_STYLES.get(style_name, _CAPTION_STYLES["classic_white"])
     vf = (
-        f"subtitles='{srt_escaped}':force_style='FontName=Arial,Bold=1,FontSize={font_size},"
-        f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-        f"BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV={margin_v}'"
+        f"subtitles='{srt_escaped}':force_style='"
+        f"{style_base},FontSize={font_size},MarginV={margin_v}'"
     )
     args = ["-i", str(src), "-vf", vf]
     args += _encoder_flags(use_gpu, encoding)
