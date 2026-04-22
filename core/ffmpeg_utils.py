@@ -338,34 +338,33 @@ def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
     h = h or 1080
     w = w or 608
 
-    # 1. Deteksi Orientasi Video (Portrait vs Landscape)
+    # 1. Deteksi Orientasi Video
     is_portrait = h > w
 
-    # 2. Sesuaikan Ukuran Font (Lebih kecil sedikit agar profesional & elegan)
-    # Kita turunkan rasio default menjadi 0.032 (sebelumnya 0.038)
-    size_ratio = _STYLE_SIZE_RATIOS.get(style_name, 0.032)
-    
+    # 2. Pengaturan Ukuran dan Posisi Profesional
     if is_portrait:
-        # PENGATURAN UNTUK SHORTS / REELS / TIKTOK (9:16)
-        font_size = max(14, int(h * size_ratio))
-        # Margin Bawah: 18% dari tinggi. Menempatkan teks di "Safe Zone".
-        # Tidak menutupi wajah di tengah, tapi cukup tinggi agar tidak tertutup caption/UI TikTok di bawah.
-        margin_v = int(h * 0.18)
-        # Margin Kiri-Kanan: 8% agar teks panjang otomatis turun ke baris baru dan tidak nabrak layar
+        # PENGATURAN VIDEO VERTIKAL (Shorts / Reels / TikTok - 9:16)
+        # Font lebih proporsional, tidak menutupi seluruh layar
+        font_size = max(14, int(h * 0.026)) 
+        # Margin dari bawah (naik sedikit agar tidak tertutup caption/UI TikTok)
+        margin_v = int(h * 0.15)            
         margin_lr = int(w * 0.08)
     else:
-        # PENGATURAN UNTUK YOUTUBE STANDAR / FILM (16:9)
-        # Font sedikit disesuaikan untuk layar lebar
-        font_size = max(14, int(h * 0.045))
-        # Margin Bawah: Sangat mepet ke tepi bawah layar (hanya 6% margin) ala subtitle bioskop/Netflix.
-        margin_v = int(h * 0.06)
+        # PENGATURAN VIDEO HORIZONTAL (YouTube Biasa - 16:9)
+        # Font standar sinematik
+        font_size = max(14, int(h * 0.040))
+        # Mepet ke bawah layar ala Netflix/Bioskop
+        margin_v = int(h * 0.06)            
         margin_lr = int(w * 0.05)
 
-    style_base = _CAPTION_STYLES.get(style_name, _CAPTION_STYLES["classic_white"])
+    # Ambil style dasar jika ada, atau kosongkan
+    style_base = _CAPTION_STYLES.get(style_name, _CAPTION_STYLES.get("classic_white", ""))
     
+    # 3. KUNCI PERBAIKAN: Tambahkan Alignment=2 (Bottom Center)
+    # Ini akan secara paksa menarik teks dari tengah layar ke bagian bawah (Bottom).
     vf = (
         f"subtitles='{srt_escaped}':force_style='"
-        f"{style_base},FontSize={font_size},"
+        f"{style_base},Alignment=2,FontSize={font_size},"
         f"MarginV={margin_v},MarginL={margin_lr},MarginR={margin_lr}'"
     )
     
