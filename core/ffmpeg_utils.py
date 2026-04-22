@@ -338,23 +338,27 @@ def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
     h = h or 1080
     w = w or 608
 
+    is_portrait = h > w
+
     size_ratio = _STYLE_SIZE_RATIOS.get(style_name, 0.038)
     font_size = max(14, int(h * size_ratio))
 
-    # MarginV: 4% dari tinggi — mepet bawah seperti subtitle film/Shorts
+    # MarginV: 4% dari tinggi — mepet bawah
     margin_v = max(20, int(h * 0.04))
-    # MarginL/R: 5% dari lebar — teks tidak mepet tepi kiri/kanan
-    margin_lr = max(20, int(w * 0.05))
+    # Portrait (Shorts/Reels): padding kiri/kanan lebih lebar
+    margin_lr = max(20, int(w * (0.08 if is_portrait else 0.05)))
 
     style_base = _CAPTION_STYLES.get(style_name, _CAPTION_STYLES["classic_white"])
     vf = (
         f"subtitles='{srt_escaped}':force_style='"
-        f"{style_base},FontSize={font_size},"
+        f"{style_base},Alignment=2,FontSize={font_size},"
         f"MarginV={margin_v},MarginL={margin_lr},MarginR={margin_lr}'"
     )
+
     args = ["-i", str(src), "-vf", vf]
     args += _encoder_flags(use_gpu, encoding)
     args += ["-c:a", "copy", str(dst)]
+    
     run_ffmpeg(args)
     return str(dst)
 

@@ -337,7 +337,7 @@ PENTING:
             h = int(sec // 3600)
             m = int((sec % 3600) // 60)
             s = sec % 60
-            return f"{h:02d}:{m:02d}:{int(s):02d},{int((s % 1) * 1000):03d}"
+            return f"{h:02d}:{m:02d}:{int(s):02d},{int(round((s % 1) * 1000)):03d}"
 
         # Cari URL VTT
         vtt_url = None
