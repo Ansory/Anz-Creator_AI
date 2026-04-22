@@ -110,6 +110,41 @@ class ShortMaker:
         except ImportError as e:
             raise RuntimeError("yt-dlp tidak terinstall. Jalankan: pip install yt-dlp") from e
 
+    # Allowed browser names for cookiesfrombrowser — explicit allowlist prevents injection.
+    _ALLOWED_BROWSERS = frozenset({"chrome", "firefox", "edge", "brave", "opera", "chromium", "safari"})
+
+    def _yt_cookie_opts(self) -> dict:
+        """
+        Return yt-dlp cookie options untuk bypass bot-detection YouTube.
+        Urutan prioritas:
+          1. YT_COOKIES_FILE env / cookies.txt / youtube_cookies.txt di root project
+          2. YT_COOKIES_BROWSER env (chrome|firefox|edge|brave|opera|chromium)
+        Return dict kosong jika tidak ada konfigurasi.
+        """
+        import os
+
+        # --- Cookie file ---
+        raw_path = os.environ.get("YT_COOKIES_FILE", "")
+        candidate_paths: list[Path] = []
+        if raw_path:
+            candidate_paths.append(Path(raw_path))
+        root = Path(__file__).resolve().parent.parent
+        for name in ("cookies.txt", "youtube_cookies.txt"):
+            candidate_paths.append(root / name)
+
+        for p in candidate_paths:
+            # resolve() canonicalises the path and eliminates any traversal sequences.
+            resolved = p.resolve()
+            if resolved.is_file():
+                return {"cookiefile": str(resolved)}
+
+        # --- Cookie browser (allowlist-validated) ---
+        browser = os.environ.get("YT_COOKIES_BROWSER", "").strip().lower()
+        if browser in self._ALLOWED_BROWSERS:
+            return {"cookiesfrombrowser": (browser,)}
+
+        return {}
+
     def _get_yt_info(self, url: str) -> dict:
         """Ambil metadata video tanpa download (untuk dapat durasi, judul, dll)."""
         yt_dlp = self._yt_dlp()
@@ -118,6 +153,7 @@ class ShortMaker:
             "no_warnings": True,
             "socket_timeout": 20,
             "skip_download": True,
+            **self._yt_cookie_opts(),
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False) or {}
@@ -234,6 +270,7 @@ class ShortMaker:
             "extractor_retries": 3,
             "throttledratelimit": 100,       # retry kalau speed < 100 B/s
             "http_chunk_size": 10_485_760,   # 10 MB chunks
+            **self._yt_cookie_opts(),
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
