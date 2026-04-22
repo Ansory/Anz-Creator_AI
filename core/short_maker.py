@@ -102,40 +102,69 @@ class ShortMaker:
         self.work_dir.mkdir(exist_ok=True)
 
     # ------------------------------------------------------- Download
-    def _download_youtube(self, url: str, progress_cb=None) -> Path:
-        """Download video pakai yt-dlp. Return path file."""
+    def _yt_dlp(self):
         try:
             import yt_dlp
+            return yt_dlp
         except ImportError as e:
             raise RuntimeError("yt-dlp tidak terinstall. Jalankan: pip install yt-dlp") from e
+
+    def _get_yt_info(self, url: str) -> dict:
+        """Ambil metadata video tanpa download (untuk dapat durasi, judul, dll)."""
+        yt_dlp = self._yt_dlp()
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "socket_timeout": 20,
+            "skip_download": True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            return ydl.extract_info(url, download=False) or {}
+
+    def _download_youtube(self, url: str, quality: str = "1080p", progress_cb=None) -> Path:
+        """Download video pakai yt-dlp dengan retry & timeout. Return path file."""
+        yt_dlp = self._yt_dlp()
+
+        quality_heights = {
+            "4K": 2160, "2K": 1440, "1080p": 1080,
+            "720p": 720, "480p": 480, "360p": 360,
+        }
+        max_h = quality_heights.get(quality, 1080)
 
         job_id = uuid.uuid4().hex[:8]
         out_template = str(self.work_dir / f"yt_{job_id}.%(ext)s")
 
-        # Dapatkan lokasi ffmpeg dari helper kita
         ffmpeg_path = ff.ffmpeg_bin()
         ffmpeg_dir = str(Path(ffmpeg_path).parent)
 
         def hook(d):
             if progress_cb and d.get("status") == "downloading":
                 pct = d.get("_percent_str", "").strip()
-                progress_cb(f"Download: {pct}")
+                speed = d.get("_speed_str", "").strip()
+                progress_cb(f"Download: {pct} · {speed}")
 
         ydl_opts = {
-            "format": "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
+            "format": f"bestvideo[height<={max_h}]+bestaudio/best[height<={max_h}]/best",
             "merge_output_format": "mp4",
             "outtmpl": out_template,
             "quiet": True,
             "no_warnings": True,
             "progress_hooks": [hook] if progress_cb else [],
-            "ffmpeg_location": ffmpeg_dir,   # <-- TAMBAHKAN INI
+            "ffmpeg_location": ffmpeg_dir,
+            # Timeout & retry settings
+            "socket_timeout": 30,
+            "retries": 5,
+            "fragment_retries": 5,
+            "file_access_retries": 3,
+            "extractor_retries": 3,
+            "throttledratelimit": 100,       # retry kalau speed < 100 B/s
+            "http_chunk_size": 10_485_760,   # 10 MB chunks
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             p = Path(filename)
             if not p.exists():
-                # coba ganti ekstensi
                 for ext in (".mp4", ".mkv", ".webm"):
                     alt = p.with_suffix(ext)
                     if alt.exists():
@@ -247,7 +276,7 @@ PENTING:
         log("Mempersiapkan video source...")
         if opts.source_type == "url":
             log("Downloading dari YouTube...")
-            src_path = self._download_youtube(opts.source, progress_cb=progress_cb)
+            src_path = self._download_youtube(opts.source, quality=opts.quality, progress_cb=progress_cb)
         else:
             src_path = Path(opts.source)
             if not src_path.exists():
@@ -368,13 +397,16 @@ PENTING:
                            language: str = "id") -> Dict:
         """
         Scan video tanpa render, return daftar momen viral terbaik.
+        Untuk URL: ambil durasi dari metadata saja (tanpa download penuh).
         """
         if source_type == "url":
-            src_path = self._download_youtube(source)
+            info = self._get_yt_info(source)
+            duration = float(info.get("duration") or 0)
+            if duration <= 0:
+                raise RuntimeError("Tidak bisa mendapatkan durasi video dari URL tersebut.")
         else:
             src_path = Path(source)
-
-        duration = ff.get_duration(src_path)
+            duration = ff.get_duration(src_path)
         topic_desc = TOPICS.get(topic, TOPICS["free"])
         lang_label = "Bahasa Indonesia" if language == "id" else "English"
 
