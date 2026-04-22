@@ -309,32 +309,128 @@ PENTING:
             }
 
     # ------------------------------------------------------- Subtitle
-    def _generate_srt(self, video_path: Path, srt_path: Path, duration: float) -> None:
+    def _vtt_to_srt_clipped(self, yt_info: dict, clip_start: float, clip_end: float) -> str:
         """
-        Generate SRT placeholder sederhana.
-        Note: untuk transkripsi akurat, idealnya pakai Whisper/Gemini Audio.
+        Ambil VTT dari YouTube, filter ke window clip, offset timestamp, return SRT.
         """
-        # coba pakai Whisper kalau ada
+        def fetch_vtt(url: str) -> str:
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return r.read().decode("utf-8", errors="ignore")
+            except Exception:
+                return ""
+
+        def ts_to_sec(ts: str) -> float:
+            parts = ts.strip().split(":")
+            try:
+                if len(parts) == 3:
+                    return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+                if len(parts) == 2:
+                    return int(parts[0]) * 60 + float(parts[1])
+            except Exception:
+                pass
+            return 0.0
+
+        def sec_to_srt_ts(sec: float) -> str:
+            sec = max(0.0, sec)
+            h = int(sec // 3600)
+            m = int((sec % 3600) // 60)
+            s = sec % 60
+            return f"{h:02d}:{m:02d}:{int(s):02d},{int((s % 1) * 1000):03d}"
+
+        # Cari URL VTT
+        vtt_url = None
+        for pool_key in ("subtitles", "automatic_captions"):
+            pool = yt_info.get(pool_key) or {}
+            for lang in ("id", "en", "en-US", "en-GB"):
+                tracks = pool.get(lang, [])
+                vtt_url = next((t["url"] for t in tracks if t.get("ext") == "vtt"), None)
+                if vtt_url:
+                    break
+            if vtt_url:
+                break
+        if not vtt_url:
+            return ""
+
+        raw = fetch_vtt(vtt_url)
+        if not raw:
+            return ""
+
+        # Parse VTT entries
+        raw_entries: list[tuple[float, float, str]] = []
+        lines = raw.splitlines()
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if "-->" in line:
+                parts = line.split("-->")
+                if len(parts) == 2:
+                    t_s = ts_to_sec(parts[0].strip())
+                    t_e = ts_to_sec(parts[1].strip().split()[0])
+                    text_parts: list[str] = []
+                    i += 1
+                    while i < len(lines) and lines[i].strip() and "-->" not in lines[i]:
+                        cleaned = re.sub(r"<[^>]+>", "", lines[i]).strip()
+                        if cleaned:
+                            text_parts.append(cleaned)
+                        i += 1
+                    text = " ".join(text_parts)
+                    if text:
+                        raw_entries.append((t_s, t_e, text))
+                    continue
+            i += 1
+
+        # Filter ke window clip, offset, deduplicate
+        srt_entries: list[tuple[float, float, str]] = []
+        prev_text = ""
+        for t_s, t_e, text in raw_entries:
+            if t_e <= clip_start or t_s >= clip_end:
+                continue
+            new_s = max(0.0, t_s - clip_start)
+            new_e = min(clip_end - clip_start, t_e - clip_start)
+            if new_e <= new_s or text == prev_text:
+                continue
+            srt_entries.append((new_s, new_e, text))
+            prev_text = text
+
+        if not srt_entries:
+            return ""
+
+        return "\n".join(
+            f"{n}\n{sec_to_srt_ts(s)} --> {sec_to_srt_ts(e)}\n{t}\n"
+            for n, (s, e, t) in enumerate(srt_entries, 1)
+        )
+
+    def _generate_srt(self, video_path: Path, srt_path: Path, duration: float,
+                      yt_info: dict | None = None, clip_start: float = 0.0) -> bool:
+        """
+        Generate SRT file. Return True jika ada konten subtitle nyata.
+        Priority: Whisper → YouTube captions (clipped+offset) → skip (file kosong).
+        """
+        # 1. Coba Whisper
         try:
             import whisper  # type: ignore
             model = whisper.load_model("base")
             result = model.transcribe(str(video_path))
             self._write_srt_from_whisper(result, srt_path)
-            return
+            return True
         except Exception:
             pass
 
-        # Fallback: satu baris captions
-        h = int(duration // 3600)
-        m = int((duration % 3600) // 60)
-        s = duration % 60
-        end_ts = f"{h:02d}:{m:02d}:{s:06.3f}".replace(".", ",")
-        with open(srt_path, "w", encoding="utf-8") as f:
-            f.write(
-                "1\n"
-                f"00:00:00,000 --> {end_ts}\n"
-                "[ Aktifkan subtitle via transkripsi Whisper untuk hasil terbaik ]\n\n"
-            )
+        # 2. Coba YouTube captions (sudah ada dari yt_info, tidak perlu download ulang)
+        if yt_info is not None:
+            try:
+                srt_text = self._vtt_to_srt_clipped(yt_info, clip_start, clip_start + duration)
+                if srt_text.strip():
+                    srt_path.write_text(srt_text, encoding="utf-8")
+                    return True
+            except Exception:
+                pass
+
+        # 3. Tidak ada subtitle — tulis file kosong, jangan burn
+        srt_path.write_text("", encoding="utf-8")
+        return False
 
     def _write_srt_from_whisper(self, result: dict, srt_path: Path) -> None:
         def ts(t: float) -> str:
@@ -450,16 +546,26 @@ PENTING:
         if opts.caption_ai:
             log("Generate subtitle...")
             srt_path = self.work_dir / f"sub_{job_id}.srt"
-            self._generate_srt(transformed_path, srt_path, ff.get_duration(transformed_path))
-            captioned_path = self.work_dir / f"cap_{job_id}.mp4"
-            try:
-                ff.burn_subtitles(transformed_path, captioned_path, srt_path,
-                                  style_name=opts.caption_style,
-                                  use_gpu=opts.use_gpu, encoding=opts.encoding)
-                final_src = captioned_path
-                caption_applied = True
-            except Exception as e:  # noqa: BLE001
-                log(f"[WARN] Subtitle gagal diburn, video tetap diproses tanpa caption: {e}")
+            has_srt = self._generate_srt(
+                transformed_path, srt_path,
+                duration=ff.get_duration(transformed_path),
+                yt_info=yt_info,
+                clip_start=start,
+            )
+            if has_srt:
+                captioned_path = self.work_dir / f"cap_{job_id}.mp4"
+                try:
+                    ff.burn_subtitles(transformed_path, captioned_path, srt_path,
+                                      style_name=opts.caption_style,
+                                      use_gpu=opts.use_gpu, encoding=opts.encoding)
+                    final_src = captioned_path
+                    caption_applied = True
+                    log("✓ Subtitle berhasil diburn")
+                except Exception as e:  # noqa: BLE001
+                    log(f"[WARN] Subtitle gagal diburn: {e}")
+                    final_src = transformed_path
+            else:
+                log("[INFO] Tidak ada subtitle tersedia — caption dilewati")
                 final_src = transformed_path
         else:
             final_src = transformed_path
