@@ -110,6 +110,32 @@ class ShortMaker:
         except ImportError as e:
             raise RuntimeError("yt-dlp tidak terinstall. Jalankan: pip install yt-dlp") from e
 
+    def _yt_cookie_opts(self) -> dict:
+        """
+        Return yt-dlp cookie options untuk bypass bot-detection YouTube.
+        Urutan prioritas:
+          1. YT_COOKIES_FILE env / cookies.txt / youtube_cookies.txt di root project
+          2. YT_COOKIES_BROWSER env (chrome|firefox|edge|brave|opera|chromium)
+        Return dict kosong jika tidak ada konfigurasi.
+        """
+        import os
+        cookie_file = os.environ.get("YT_COOKIES_FILE", "")
+        if not cookie_file:
+            root = Path(__file__).resolve().parent.parent
+            for name in ("cookies.txt", "youtube_cookies.txt"):
+                candidate = root / name
+                if candidate.exists():
+                    cookie_file = str(candidate)
+                    break
+        if cookie_file:
+            return {"cookiefile": cookie_file}
+
+        browser = os.environ.get("YT_COOKIES_BROWSER", "").strip().lower()
+        if browser:
+            return {"cookiesfrombrowser": (browser,)}
+
+        return {}
+
     def _get_yt_info(self, url: str) -> dict:
         """Ambil metadata video tanpa download (untuk dapat durasi, judul, dll)."""
         yt_dlp = self._yt_dlp()
@@ -118,6 +144,7 @@ class ShortMaker:
             "no_warnings": True,
             "socket_timeout": 20,
             "skip_download": True,
+            **self._yt_cookie_opts(),
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False) or {}
@@ -234,6 +261,7 @@ class ShortMaker:
             "extractor_retries": 3,
             "throttledratelimit": 100,       # retry kalau speed < 100 B/s
             "http_chunk_size": 10_485_760,   # 10 MB chunks
+            **self._yt_cookie_opts(),
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
