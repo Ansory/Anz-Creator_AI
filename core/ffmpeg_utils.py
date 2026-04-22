@@ -338,23 +338,41 @@ def burn_subtitles(src: str | Path, dst: str | Path, srt_path: str | Path,
     h = h or 1080
     w = w or 608
 
-    size_ratio = _STYLE_SIZE_RATIOS.get(style_name, 0.038)
-    font_size = max(14, int(h * size_ratio))
+    # 1. Deteksi Orientasi Video (Portrait vs Landscape)
+    is_portrait = h > w
 
-    # MarginV: 12% dari tinggi — memberi safe zone dari UI phone/chrome di bawah
-    margin_v = max(60, int(h * 0.12))
-    # MarginL/R: 5% dari lebar — teks tidak mepet tepi kiri/kanan
-    margin_lr = max(20, int(w * 0.05))
+    # 2. Sesuaikan Ukuran Font (Lebih kecil sedikit agar profesional & elegan)
+    # Kita turunkan rasio default menjadi 0.032 (sebelumnya 0.038)
+    size_ratio = _STYLE_SIZE_RATIOS.get(style_name, 0.032)
+    
+    if is_portrait:
+        # PENGATURAN UNTUK SHORTS / REELS / TIKTOK (9:16)
+        font_size = max(14, int(h * size_ratio))
+        # Margin Bawah: 18% dari tinggi. Menempatkan teks di "Safe Zone".
+        # Tidak menutupi wajah di tengah, tapi cukup tinggi agar tidak tertutup caption/UI TikTok di bawah.
+        margin_v = int(h * 0.18)
+        # Margin Kiri-Kanan: 8% agar teks panjang otomatis turun ke baris baru dan tidak nabrak layar
+        margin_lr = int(w * 0.08)
+    else:
+        # PENGATURAN UNTUK YOUTUBE STANDAR / FILM (16:9)
+        # Font sedikit disesuaikan untuk layar lebar
+        font_size = max(14, int(h * 0.045))
+        # Margin Bawah: Sangat mepet ke tepi bawah layar (hanya 6% margin) ala subtitle bioskop/Netflix.
+        margin_v = int(h * 0.06)
+        margin_lr = int(w * 0.05)
 
     style_base = _CAPTION_STYLES.get(style_name, _CAPTION_STYLES["classic_white"])
+    
     vf = (
         f"subtitles='{srt_escaped}':force_style='"
         f"{style_base},FontSize={font_size},"
         f"MarginV={margin_v},MarginL={margin_lr},MarginR={margin_lr}'"
     )
+    
     args = ["-i", str(src), "-vf", vf]
     args += _encoder_flags(use_gpu, encoding)
     args += ["-c:a", "copy", str(dst)]
+    
     run_ffmpeg(args)
     return str(dst)
 
